@@ -9,14 +9,15 @@
   /* Decorative swatch colors per theme id — kept simple/self-contained rather than
      depending on css/themes.css class names owned by another agent. */
   var THEME_SWATCHES = {
-    'dark-gym': ['#0d0f12', '#1c2026', '#ff5a36'],
-    'high-contrast': ['#000000', '#ffffff', '#ffe100'],
-    'minimal-light': ['#ffffff', '#e9e9ee', '#2f6fed'],
-    'retro-lcd': ['#0b1a0f', '#123a1b', '#66ff66']
+    'hardcore': ['#000000', '#ff2222', '#37b6ff'],
+    'modern-white': ['#f6f7f8', '#101114', '#e11d2e'],
+    'dark-gym': ['#0d0f12', '#e5484d', '#3b82f6'],
+    'retro-lcd': ['#04140a', '#39ff6a', '#0a2414'],
+    'high-contrast': ['#000000', '#ffffff', '#ff3b30']
   };
 
   function defaultSettings() {
-    return { version: 1, theme: 'dark-gym', soundPack: 'referee', volume: 0.8, lastMode: null, lastConfigs: {} };
+    return { version: 1, theme: 'hardcore', soundPack: 'referee', volume: 0.8, lastMode: null, lastConfigs: {} };
   }
 
   function loadSettings() {

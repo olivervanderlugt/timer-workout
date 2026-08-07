@@ -1,10 +1,111 @@
-/* themes.css — Agent B. [data-theme] token overrides + minimal per-theme
-   structural flourishes (background flips, LCD ghost digits). Everything
-   else must keep using the tokens defined here / in base.css. */
+/* themes.css — [data-theme] token overrides + minimal per-theme structural
+   flourishes (background flips, LCD ghost digits, hardcore scoreboard type).
+   Everything else keeps using the tokens from base.css / layout.css. */
 
 /* ---------------------------------------------------------------- */
-/* dark-gym (default) — matches base.css :root, declared explicitly
-   for symmetry/documentation. Paired sound pack: referee.            */
+/* hardcore (default) — pure black, massive RED work digits,
+   boxing-gym scoreboard. Paired sound pack: referee.                */
+/* ---------------------------------------------------------------- */
+html[data-theme="hardcore"] {
+  --bg: #000000;
+  --bg-raised: #111214;
+  --fg: #ffffff;
+  --fg-muted: #8a8f98;
+  --accent: #ff2222;
+  --accent-work: #ff2222;
+  --accent-rest: #37b6ff;
+  --accent-prep: #ffffff;
+  --danger: #ff2222;
+  --radius: 8px;
+  --shadow: none;
+  --card-line: #1f2126;
+  --run-on-accent: #ffffff;
+  --run-time-weight: 900;
+  --run-wash: 0%;
+}
+
+/* the digits themselves take the segment color — declared on #screen-run so
+   the var() resolves against the element that carries data-segment-type */
+html[data-theme="hardcore"] #screen-run { --run-digits: var(--run-accent); }
+
+/* prep segment is white — flip on-accent ink to black for that stretch */
+html[data-theme="hardcore"] #screen-run[data-segment-type="prep"] { --run-on-accent: #000000; }
+
+/* scoreboard type: heavy, uppercase, tracked-out display labels */
+html[data-theme="hardcore"] .app-title,
+html[data-theme="hardcore"] .config-title {
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  font-weight: 900;
+  font-size: 1.05rem;
+}
+html[data-theme="hardcore"] .section-title { letter-spacing: 0.22em; }
+html[data-theme="hardcore"] .mode-name { letter-spacing: 0.12em; font-weight: 900; }
+html[data-theme="hardcore"] .btn {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 800;
+  font-size: 0.9rem;
+  padding: 0 var(--sp-4);
+}
+
+/* run screen: pure black stage, digits even bigger */
+html[data-theme="hardcore"] #screen-run { background: var(--bg); }
+html[data-theme="hardcore"] .run-time {
+  font-size: clamp(3rem, min(30vw, 42vh), 20rem);
+  letter-spacing: -0.03em;
+}
+@media (max-height: 500px) {
+  html[data-theme="hardcore"] .run-time { font-size: clamp(2.5rem, min(28vw, 44vh), 14rem); }
+}
+/* subtle red top progress: quiet track on black */
+html[data-theme="hardcore"] .run-progress {
+  background: color-mix(in srgb, var(--run-accent) 22%, #000000);
+}
+html[data-theme="hardcore"] .run-round {
+  background: transparent;
+  border: 1px solid var(--card-line);
+  color: var(--fg-muted);
+}
+
+/* ---------------------------------------------------------------- */
+/* modern-white — premium-light: airy, layered soft shadows,
+   black buttons. Paired sound pack: chime.                          */
+/* ---------------------------------------------------------------- */
+html[data-theme="modern-white"] {
+  --bg: #f6f7f8;
+  --bg-raised: #ffffff;
+  --fg: #101114;
+  --fg-muted: #6b7280;
+  --accent: #101114;
+  --accent-work: #e11d2e;
+  --accent-rest: #2563eb;
+  --accent-prep: #f59e0b;
+  --danger: #e11d2e;
+  --radius: 16px;
+  --shadow: 0 1px 2px rgba(16, 17, 20, 0.04), 0 8px 24px rgba(16, 17, 20, 0.06);
+  --card-line: rgba(16, 17, 20, 0.07);
+  --run-on-accent: #ffffff;
+  --run-time-weight: 800;
+  --run-wash: 7%;
+}
+
+html[data-theme="modern-white"] .run-btn:not(.run-btn-primary) {
+  background: #ffffff;
+  box-shadow: var(--shadow);
+}
+html[data-theme="modern-white"] .run-btn:not(.run-btn-primary):hover {
+  background: color-mix(in srgb, var(--fg) 5%, #ffffff);
+}
+html[data-theme="modern-white"] .config-actions {
+  background: color-mix(in srgb, #ffffff 72%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+/* ---------------------------------------------------------------- */
+/* dark-gym — charcoal + signal red, the original.
+   Paired sound pack: classic.                                       */
 /* ---------------------------------------------------------------- */
 html[data-theme="dark-gym"] {
   --bg: #0d0f12;
@@ -18,80 +119,15 @@ html[data-theme="dark-gym"] {
   --danger: #e5484d;
   --radius: 14px;
   --shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
-  --font-display: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --card-line: rgba(255, 255, 255, 0.06);
+  --run-on-accent: #ffffff;
   --run-time-weight: 800;
+  --run-wash: 14%;
 }
 
 /* ---------------------------------------------------------------- */
-/* high-contrast — pure black/white, max-weight digits, work/rest
-   communicated via full background flips. Paired sound pack: classic. */
-/* ---------------------------------------------------------------- */
-html[data-theme="high-contrast"] {
-  --bg: #000000;
-  --bg-raised: #111111;
-  --fg: #ffffff;
-  --fg-muted: #cfcfcf;
-  --accent: #ffffff;
-  --accent-work: #ffffff;
-  --accent-rest: #ffffff;
-  --accent-prep: #ffffff;
-  --danger: #ff3b30;
-  --radius: 4px;
-  --shadow: none;
-  --run-time-weight: 900;
-}
-
-/* Full background flip per segment type: bg <-> fg swap. */
-html[data-theme="high-contrast"] #screen-run[data-segment-type="work"] {
-  --bg: #ffffff;
-  --fg: #000000;
-  --fg-muted: #333333;
-  --run-accent: #000000;
-}
-
-html[data-theme="high-contrast"] #screen-run[data-segment-type="rest"] {
-  --bg: #000000;
-  --fg: #ffffff;
-  --fg-muted: #cfcfcf;
-  --run-accent: #ffffff;
-}
-
-html[data-theme="high-contrast"] #screen-run[data-segment-type="prep"] {
-  --bg: #000000;
-  --fg: #ffffff;
-  --run-accent: #ffffff;
-}
-
-html[data-theme="high-contrast"] .run-progress-fill,
-html[data-theme="high-contrast"] .run-btn-primary {
-  background: var(--run-accent);
-  color: var(--bg);
-}
-
-/* ---------------------------------------------------------------- */
-/* minimal-light — warm off-white bg, soft ink fg, sage work /
-   dusty-blue rest. Paired sound pack: chime.                        */
-/* ---------------------------------------------------------------- */
-html[data-theme="minimal-light"] {
-  --bg: #faf7f2;
-  --bg-raised: #f1ece3;
-  --fg: #2b2a28;
-  --fg-muted: #7a756c;
-  --accent: #7a9b7e;
-  --accent-work: #7a9b7e;
-  --accent-rest: #7a93ad;
-  --accent-prep: #d3a15e;
-  --danger: #c1554a;
-  --radius: 16px;
-  --shadow: 0 4px 16px rgba(60, 50, 40, 0.08);
-  --run-time-weight: 700;
-}
-
-/* ---------------------------------------------------------------- */
-/* retro-lcd — dark green-black bg, phosphor-green digits, monospace
-   display font, square corners, faux LCD ghost digits. Paired
-   sound pack: 8bit.                                                 */
+/* retro-lcd — dark green-black bg, phosphor-green monospace digits,
+   square corners, faux LCD ghost digits. Paired sound pack: 8bit.   */
 /* ---------------------------------------------------------------- */
 html[data-theme="retro-lcd"] {
   --bg: #04140a;
@@ -105,17 +141,21 @@ html[data-theme="retro-lcd"] {
   --danger: #ff5a5a;
   --radius: 0px;
   --shadow: none;
+  --card-line: color-mix(in srgb, #39ff6a 25%, transparent);
+  --run-on-accent: #04140a;
   --font-display: ui-monospace, "SF Mono", "Menlo", "Consolas", "Liberation Mono", monospace;
   --run-time-weight: 700;
+  --run-wash: 10%;
 }
 
 /* Monospace digits are wider than the default face — cap the size lower
    so "0:06.1" never clips at narrow viewports. */
 html[data-theme="retro-lcd"] .run-time {
   font-size: clamp(2.25rem, min(20vw, 30vh), 10rem);
+  letter-spacing: 0;
 }
 
-/* Faux LCD ghost segments ("888:88") behind the live digits. */
+/* Faux LCD ghost segments ("88:88") behind the live digits. */
 html[data-theme="retro-lcd"] .run-time::before {
   content: "88:88";
   position: absolute;
@@ -128,10 +168,55 @@ html[data-theme="retro-lcd"] .run-time::before {
   pointer-events: none;
 }
 
-html[data-theme="retro-lcd"] .mode-tile,
-html[data-theme="retro-lcd"] .preset-item,
-html[data-theme="retro-lcd"] .field-row,
-html[data-theme="retro-lcd"] .theme-card,
-html[data-theme="retro-lcd"] .sound-row {
-  border: 1px solid color-mix(in srgb, var(--fg) 25%, transparent);
+/* ---------------------------------------------------------------- */
+/* high-contrast — pure black/white, max-weight digits, work/rest
+   communicated via full background flips. Paired sound pack: classic. */
+/* ---------------------------------------------------------------- */
+html[data-theme="high-contrast"] {
+  --bg: #000000;
+  --bg-raised: #101010;
+  --fg: #ffffff;
+  --fg-muted: #cfcfcf;
+  --accent: #ffffff;
+  --accent-work: #ffffff;
+  --accent-rest: #ffffff;
+  --accent-prep: #ffffff;
+  --danger: #ff3b30;
+  --radius: 4px;
+  --shadow: none;
+  --card-line: #5a5a5a;
+  --run-on-accent: #000000;
+  --run-time-weight: 900;
+  --run-wash: 0%;
+}
+
+/* Full background flip per segment type: bg <-> fg swap. */
+html[data-theme="high-contrast"] #screen-run[data-segment-type="work"] {
+  --bg: #ffffff;
+  --fg: #000000;
+  --fg-muted: #333333;
+  --card-line: #8a8a8a;
+  --run-accent: #000000;
+  --run-on-accent: #ffffff;
+}
+
+html[data-theme="high-contrast"] #screen-run[data-segment-type="rest"] {
+  --bg: #000000;
+  --fg: #ffffff;
+  --fg-muted: #cfcfcf;
+  --run-accent: #ffffff;
+  --run-on-accent: #000000;
+}
+
+html[data-theme="high-contrast"] #screen-run[data-segment-type="prep"] {
+  --bg: #000000;
+  --fg: #ffffff;
+  --run-accent: #ffffff;
+  --run-on-accent: #000000;
+}
+
+html[data-theme="high-contrast"] #screen-run { background: var(--bg); }
+
+html[data-theme="high-contrast"] .run-progress {
+  background: color-mix(in srgb, var(--fg) 25%, transparent);
 }

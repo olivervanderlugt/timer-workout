@@ -11,7 +11,7 @@
   var currentPresetId = null;
 
   function defaultSettings() {
-    return { version: 1, theme: 'dark-gym', soundPack: 'referee', volume: 0.8, lastMode: null, lastConfigs: {} };
+    return { version: 1, theme: 'hardcore', soundPack: 'referee', volume: 0.8, lastMode: null, lastConfigs: {} };
   }
 
   function loadSettings() {

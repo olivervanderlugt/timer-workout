@@ -1,22 +1,44 @@
-/* base.css — reset + token contract. FROZEN: all other CSS uses only these tokens. */
+/* base.css — reset + token contract. All other CSS uses only these tokens.
+   :root defaults = Hardcore theme (the default). Themes override in themes.css. */
 
 :root {
-  /* Color tokens — defaults = Dark Gym theme */
-  --bg: #0d0f12;
-  --bg-raised: #16191f;
-  --fg: #f5f6f8;
-  --fg-muted: #9aa1ad;
-  --accent: #e5484d;
-  --accent-work: #e5484d;
-  --accent-rest: #3b82f6;
-  --accent-prep: #f5a524;
-  --danger: #e5484d;
-  --radius: 14px;
-  --shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+  /* Color tokens — defaults = Hardcore theme */
+  --bg: #000000;
+  --bg-raised: #111214;
+  --fg: #ffffff;
+  --fg-muted: #8a8f98;
+  --accent: #ff2222;
+  --accent-work: #ff2222;
+  --accent-rest: #37b6ff;
+  --accent-prep: #ffffff;
+  --danger: #ff2222;
+  --radius: 8px;
+  --shadow: none;
   --font-display: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+
   /* Derived at runtime by segment type on #screen-run */
   --run-accent: var(--accent-prep);
+  /* Color of the big run digits (hardcore sets this to var(--run-accent)) */
+  --run-digits: var(--fg);
+  /* Foreground drawn on top of --run-accent surfaces (pause button, etc.) */
+  --run-on-accent: #ffffff;
+
+  /* Surface detail: hairline border color for cards on flat themes */
+  --card-line: transparent;
+
+  /* Spacing scale — the only gaps/padding values used anywhere */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-6: 24px;
+  --sp-8: 32px;
+  --sp-12: 48px;
+
+  /* Content column + gutters (shared by home / config / settings) */
+  --gutter: clamp(16px, 4vw, 32px);
+  --col: 720px;
 }
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -51,6 +73,21 @@ button {
 
 input { font-family: inherit; }
 
+/* Segment coloring — #screen-run carries data-segment-type at runtime */
+#screen-run[data-segment-type="prep"] { --run-accent: var(--accent-prep); }
+#screen-run[data-segment-type="work"] { --run-accent: var(--accent-work); }
+#screen-run[data-segment-type="rest"] { --run-accent: var(--accent-rest); }
+
+/* Declared on #screen-run (not :root) so the var() resolves against the
+   element that carries data-segment-type / per-segment --fg flips. */
+#screen-run { --run-digits: var(--fg); }
+
+/* Keyboard focus — visible ring in every theme, no ring on pointer taps */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 /* Screen visibility — router toggles .active */
 .screen { display: none; }
 .screen.active { display: flex; }
@@ -61,13 +98,20 @@ input { font-family: inherit; }
   align-items: center;
   justify-content: center;
   min-height: 56px;
-  padding: 0 24px;
+  padding: 0 var(--sp-6);
   border-radius: var(--radius);
-  font-size: 1.1rem;
-  font-weight: 600;
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  transition: transform 0.1s ease, filter 0.1s ease;
 }
-.btn-primary { background: var(--accent); color: #fff; }
-.btn-secondary { background: var(--bg-raised); color: var(--fg); }
+.btn:active { transform: scale(0.97); filter: brightness(0.92); }
+.btn-primary { background: var(--accent); color: var(--run-on-accent); }
+.btn-secondary {
+  background: var(--bg-raised);
+  color: var(--fg);
+  box-shadow: inset 0 0 0 1px var(--card-line);
+}
 
 .icon-btn {
   display: inline-flex;
@@ -77,13 +121,15 @@ input { font-family: inherit; }
   min-height: 48px;
   border-radius: 50%;
   color: var(--fg);
+  transition: transform 0.1s ease, background-color 0.1s ease;
 }
+.icon-btn:active { transform: scale(0.92); }
 
 .section-title {
-  font-size: 0.85rem;
-  font-weight: 600;
+  font-size: 0.8rem;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.14em;
   color: var(--fg-muted);
 }
 

@@ -65,7 +65,7 @@
   }
 
   function loadSettings() {
-    var defaults = { version: 1, theme: 'dark-gym', soundPack: 'referee', volume: 0.8, lastMode: null, lastConfigs: {} };
+    var defaults = { version: 1, theme: 'hardcore', soundPack: 'referee', volume: 0.8, lastMode: null, lastConfigs: {} };
     var s = WT.storage.get(WT.storage.KEYS.SETTINGS, defaults);
     if (!s || typeof s !== 'object') s = defaults;
     return s;

@@ -4,20 +4,22 @@
   window.WT = window.WT || {};
 
   var LIST = [
-    { id: 'dark-gym', name: 'Dark Gym', pairedSoundPack: 'referee' },
-    { id: 'high-contrast', name: 'High Contrast', pairedSoundPack: 'classic' },
-    { id: 'minimal-light', name: 'Minimal Light', pairedSoundPack: 'chime' },
-    { id: 'retro-lcd', name: 'Retro LCD', pairedSoundPack: '8bit' }
+    { id: 'hardcore', name: 'Hardcore', pairedSoundPack: 'referee' },
+    { id: 'modern-white', name: 'Modern White', pairedSoundPack: 'chime' },
+    { id: 'dark-gym', name: 'Dark Gym', pairedSoundPack: 'classic' },
+    { id: 'retro-lcd', name: 'Retro LCD', pairedSoundPack: '8bit' },
+    { id: 'high-contrast', name: 'High Contrast', pairedSoundPack: 'classic' }
   ];
 
-  var DEFAULT_ID = 'dark-gym';
+  var DEFAULT_ID = 'hardcore';
 
   /* theme-color meta values, kept out of the public list shape per spec */
   var META_COLOR = {
+    'hardcore': '#000000',
+    'modern-white': '#f6f7f8',
     'dark-gym': '#0d0f12',
-    'high-contrast': '#000000',
-    'minimal-light': '#faf7f2',
-    'retro-lcd': '#04140a'
+    'retro-lcd': '#04140a',
+    'high-contrast': '#000000'
   };
 
   function findTheme(id) {
