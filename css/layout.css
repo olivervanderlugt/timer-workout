@@ -1,0 +1,616 @@
+/* layout.css — Agent B. Screen layout, forms, run view, responsive.
+   Uses ONLY base.css tokens (--bg, --bg-raised, --fg, --fg-muted, --accent,
+   --accent-work, --accent-rest, --accent-prep, --danger, --radius, --shadow,
+   --font-display, --font-ui, --run-accent) plus component-scoped custom
+   properties declared and consumed only within this file (--progress,
+   --run-time-weight). Theme visuals live in themes.css. */
+
+:root {
+  /* component-scoped properties, overridable per-theme in themes.css */
+  --run-time-weight: 800;
+  --safe-t: max(12px, env(safe-area-inset-top));
+  --safe-b: max(12px, env(safe-area-inset-bottom));
+  --safe-l: max(12px, env(safe-area-inset-left));
+  --safe-r: max(12px, env(safe-area-inset-right));
+}
+
+/* ============================================================ */
+/* Shared                                                        */
+/* ============================================================ */
+
+.screen {
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+}
+
+/* ============================================================ */
+/* HOME                                                           */
+/* ============================================================ */
+
+#screen-home {
+  overflow-y: auto;
+  padding: var(--safe-t) var(--safe-r) calc(24px + var(--safe-b)) var(--safe-l);
+  gap: 20px;
+}
+
+.home-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-top: 8px;
+}
+
+.app-title {
+  font-size: 1.3rem;
+  font-weight: 700;
+  flex: 1;
+}
+
+.home-clock {
+  font-variant-numeric: tabular-nums;
+  color: var(--fg-muted);
+  font-size: 0.95rem;
+}
+
+.mode-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+.mode-tile {
+  min-height: 96px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 16px;
+  background: var(--bg-raised);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  text-align: left;
+  transition: transform 0.12s ease;
+}
+
+.mode-tile:active {
+  transform: scale(0.97);
+}
+
+.mode-tile-onetap {
+  box-shadow: var(--shadow), inset 0 0 0 2px var(--accent);
+}
+
+.mode-name {
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.mode-desc {
+  font-size: 0.78rem;
+  color: var(--fg-muted);
+  line-height: 1.3;
+}
+
+.presets-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.preset-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.preset-item {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  background: var(--bg-raised);
+  border-radius: var(--radius);
+}
+
+.preset-item-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 12px 14px;
+  min-height: 56px;
+  text-align: left;
+  justify-content: center;
+}
+
+.preset-name {
+  font-weight: 600;
+  font-size: 0.98rem;
+}
+
+.preset-meta {
+  font-size: 0.78rem;
+  color: var(--fg-muted);
+}
+
+.preset-delete-btn {
+  color: var(--fg-muted);
+  min-width: 48px;
+}
+
+.preset-delete-btn:active,
+.preset-delete-btn:hover {
+  color: var(--danger);
+}
+
+.preset-empty {
+  padding: 16px;
+  text-align: center;
+  color: var(--fg-muted);
+  font-size: 0.9rem;
+}
+
+/* ============================================================ */
+/* CONFIG                                                          */
+/* ============================================================ */
+
+#screen-config {
+  height: 100%;
+}
+
+.config-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: var(--safe-t) 12px 8px 12px;
+}
+
+.config-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.config-form {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.config-summary {
+  padding: 0 16px 12px 16px;
+  color: var(--fg-muted);
+  font-size: 0.9rem;
+  text-align: center;
+}
+
+.config-actions {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  gap: 12px;
+  padding: 12px 16px calc(12px + var(--safe-b)) 16px;
+  background: var(--bg);
+  box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.15);
+}
+
+.config-actions .btn {
+  flex: 1;
+}
+
+/* Generated form fields — contract shared with Agent C's ui-config.js:
+   .field-row / .stepper / .stepper-btn / .stepper-value */
+
+.field-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  background: var(--bg-raised);
+  border-radius: var(--radius);
+}
+
+.field-row > *:first-child {
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.field-label {
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.stepper {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.stepper-btn {
+  min-width: 44px;
+  min-height: 44px;
+  border-radius: 50%;
+  background: var(--bg);
+  font-size: 1.4rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.stepper-btn:active {
+  transform: scale(0.94);
+}
+
+.stepper-value {
+  min-width: 64px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+
+/* ============================================================ */
+/* RUN — the centerpiece                                          */
+/* ============================================================ */
+
+#screen-run {
+  position: relative;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  background:
+    linear-gradient(color-mix(in srgb, var(--run-accent) 14%, transparent),
+                     color-mix(in srgb, var(--run-accent) 14%, transparent)),
+    var(--bg);
+  color: var(--fg);
+  transition: background-color 0.4s ease;
+}
+
+@supports not (background: color-mix(in srgb, red 10%, transparent)) {
+  #screen-run {
+    background: var(--bg);
+  }
+}
+
+.run-progress {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 5px;
+  background: color-mix(in srgb, var(--run-accent) 20%, transparent);
+  --progress: 0;
+  z-index: 3;
+}
+
+.run-progress-fill {
+  height: 100%;
+  width: 100%;
+  background: var(--run-accent);
+  transform: scaleX(var(--progress));
+  transform-origin: left center;
+  transition: transform 0.2s linear;
+}
+
+.run-clock {
+  position: absolute;
+  top: calc(12px + var(--safe-t));
+  right: calc(14px + var(--safe-r));
+  font-variant-numeric: tabular-nums;
+  font-size: 0.8rem;
+  color: var(--fg-muted);
+  z-index: 3;
+}
+
+.run-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: calc(40px + var(--safe-t)) 16px 8px 16px;
+  text-align: center;
+  min-height: 0;
+}
+
+.run-label {
+  font-size: 1.1rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--run-accent);
+}
+
+.run-time {
+  position: relative;
+  font-family: var(--font-display);
+  font-weight: var(--run-time-weight);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  font-size: clamp(2.75rem, min(28vw, 38vh), 13rem);
+  cursor: pointer;
+  user-select: none;
+}
+
+.run-round {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--fg-muted);
+}
+
+.run-next {
+  font-size: 0.9rem;
+  color: var(--fg-muted);
+}
+
+@keyframes wt-run-pulse {
+  0% { transform: scale(1); opacity: 1; }
+  35% { transform: scale(1.07); opacity: 0.82; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.run-time.pulse {
+  animation: wt-run-pulse 0.5s ease-out;
+}
+
+.lap-list {
+  max-height: 22vh;
+  overflow-y: auto;
+  padding: 0 16px;
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 4px;
+}
+
+.lap-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--run-accent) 10%, transparent);
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.lap-index {
+  color: var(--fg-muted);
+}
+
+.run-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  gap: 8px;
+  padding: 12px calc(8px + var(--safe-r)) calc(16px + var(--safe-b)) calc(8px + var(--safe-l));
+  z-index: 3;
+}
+
+.run-btn {
+  min-width: 64px;
+  min-height: 64px;
+  background: color-mix(in srgb, var(--fg) 8%, transparent);
+}
+
+.run-btn-primary {
+  min-width: 76px;
+  min-height: 76px;
+  background: var(--run-accent);
+  color: #fff;
+}
+
+#screen-run.paused .run-time {
+  opacity: 0.55;
+}
+
+#screen-run.paused .run-label {
+  opacity: 0.7;
+}
+
+.wake-hint-toast {
+  position: absolute;
+  left: 50%;
+  bottom: calc(96px + var(--safe-b));
+  transform: translateX(-50%);
+  background: var(--bg-raised);
+  color: var(--fg);
+  padding: 10px 16px;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  font-size: 0.82rem;
+  z-index: 5;
+  max-width: 80vw;
+  text-align: center;
+}
+
+/* Finished summary state */
+#screen-run.finished .run-label::after {
+  content: " \2014 Complete";
+}
+
+#screen-run.finished .run-progress {
+  opacity: 0.4;
+}
+
+#screen-run.finished .run-time {
+  cursor: pointer;
+}
+
+/* Landscape / wide: digits dominant left, round/next/laps to the right */
+@media (min-width: 700px) and (orientation: landscape) {
+  #screen-run {
+    display: grid;
+    grid-template-columns: 1.4fr 1fr;
+    grid-template-rows: auto 1fr auto;
+    grid-template-areas:
+      "progress progress"
+      "main     laps"
+      "controls controls";
+  }
+
+  .run-progress { position: relative; grid-area: progress; }
+  .run-main { grid-area: main; padding-left: calc(32px + var(--safe-l)); }
+  .lap-list {
+    grid-area: laps;
+    max-height: none;
+    align-self: stretch;
+    padding: 24px 24px 24px 8px;
+    flex-direction: column;
+  }
+  .run-controls { grid-area: controls; }
+
+  .run-main {
+    display: grid;
+    grid-template-columns: 1.3fr 1fr;
+    grid-template-rows: auto auto auto;
+    grid-template-areas:
+      "label  round"
+      "time   round"
+      "time   next";
+    align-items: center;
+    text-align: left;
+    column-gap: 24px;
+  }
+  .run-label { grid-area: label; }
+  .run-time { grid-area: time; text-align: left; }
+  .run-round { grid-area: round; align-self: end; }
+  .run-next { grid-area: next; align-self: start; }
+}
+
+/* ============================================================ */
+/* SETTINGS                                                        */
+/* ============================================================ */
+
+#screen-settings {
+  height: 100%;
+}
+
+.settings-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 16px calc(24px + var(--safe-b)) 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.settings-body .section-title {
+  margin-top: 12px;
+}
+
+/* Theme cards — actual markup emitted by Agent C's ui-settings.js:
+   #theme-list > button.theme-card[data-theme] (optionally .selected)
+     > span.theme-swatch > span.theme-swatch-color (repeated)
+     > span.theme-name */
+.theme-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  gap: 10px;
+}
+
+.theme-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  background: var(--bg-raised);
+  border-radius: var(--radius);
+  border: 2px solid transparent;
+}
+
+.theme-card.selected {
+  border-color: var(--accent);
+}
+
+.theme-swatch {
+  display: flex;
+  width: 100%;
+  height: 40px;
+  gap: 3px;
+  border-radius: calc(var(--radius) - 4px);
+  overflow: hidden;
+}
+
+.theme-swatch-color {
+  flex: 1;
+  height: 100%;
+}
+
+.theme-name {
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+/* Sound rows — actual markup emitted by Agent C's ui-settings.js:
+   #sound-list > div.sound-row (optionally .selected)
+     > button.sound-select-btn, button.sound-preview-btn */
+.sound-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sound-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 8px 8px 14px;
+  background: var(--bg-raised);
+  border-radius: var(--radius);
+}
+
+.sound-row.selected {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+.sound-select-btn {
+  flex: 1;
+  text-align: left;
+  min-height: 44px;
+  font-weight: 600;
+  font-size: 0.92rem;
+  border-radius: calc(var(--radius) - 4px);
+}
+
+.sound-select-btn[aria-pressed="true"] {
+  color: var(--accent);
+}
+
+.sound-preview-btn {
+  min-width: 44px;
+  min-height: 44px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--fg) 8%, transparent);
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.volume-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 4px;
+  font-size: 0.92rem;
+}
+
+#volume-slider {
+  flex: 1;
+  accent-color: var(--accent);
+}
+
+.wake-status {
+  color: var(--fg-muted);
+  font-size: 0.8rem;
+  padding: 8px 4px;
+  min-height: 1.2em;
+}

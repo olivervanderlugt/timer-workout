@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WT Test Harness</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+         background: #14161a; color: #e8eaed; margin: 0; padding: 1.5rem; line-height: 1.5; }
+  h1 { font-size: 1.3rem; } h2 { font-size: 1.05rem; margin-top: 2rem; border-bottom: 1px solid #333; padding-bottom: .3rem; }
+  ul#test-list { list-style: none; padding: 0; margin: .5rem 0; }
+  ul#test-list li { padding: .15rem .5rem; font-family: ui-monospace, Menlo, monospace; font-size: .85rem; }
+  li.pass { color: #4ade80; } li.pass::before { content: "PASS  "; }
+  li.fail { color: #f87171; } li.fail::before { content: "FAIL  "; }
+  #test-summary { font-weight: 700; }
+  #test-summary.ok { color: #4ade80; } #test-summary.bad { color: #f87171; }
+  button { background: #2a2e35; color: #e8eaed; border: 1px solid #444; border-radius: 6px;
+           padding: .4rem .8rem; margin: .15rem; cursor: pointer; font-size: .85rem; }
+  button:hover { background: #3a3f48; }
+  .pack-row { margin: .4rem 0; }
+  .pack-row strong { display: inline-block; width: 5.5rem; }
+  #drift-out, #sched-note { font-family: ui-monospace, Menlo, monospace; font-size: .9rem; }
+  input[type=range] { vertical-align: middle; }
+  .hint { color: #9aa0a6; font-size: .8rem; }
+</style>
+</head>
+<body>
+<h1>Workout Timer — Test Harness (Agent A)</h1>
+
+<h2>1. Unit tests (fake clock)</h2>
+<p id="test-summary">Running…</p>
+<ul id="test-list"></ul>
+
+<h2>2. Live 60s drift check</h2>
+<p><button id="btn-drift">Run 60s drift check</button>
+   <span id="drift-out">idle</span></p>
+<p class="hint">Engine elapsed vs Date.now() wall clock. Drift should stay in the low single-digit ms (clock-domain jitter only). Try switching tabs mid-run: the 250ms interval keeps ticking and elapsed must stay correct.</p>
+
+<h2>3. Audio bench</h2>
+<p>Volume <input type="range" id="vol" min="0" max="100" value="80"></p>
+<div id="packs"></div>
+<p>
+  <button id="btn-sched">Schedule beeps in 5s (background-tab test)</button>
+  <button id="btn-cancel">cancelScheduled()</button>
+  <span id="sched-note"></span>
+</p>
+<p class="hint">"Schedule" arms an 8s fake segment: countdown beeps at +5/+6/+7s, restStart tone at +8s — all pre-scheduled on the AudioContext clock. Switch to another tab immediately; the beeps must still fire on time.</p>
+
+<script src="../js/util.js"></script>
+<script src="../js/storage.js"></script>
+<script src="../js/modes.js"></script>
+<script src="../js/engine.js"></script>
+<script src="../js/audio.js"></script>
+
+<!-- DOM-free unit tests. This exact block is extracted and run headlessly in Node. -->
+<script id="wt-unit-tests">
+(function () {
+  'use strict';
+
+  window.WT_runUnitTests = function () {
+    var results = [];
+
+    function test(name, fn) {
+      try { fn(); results.push({ name: name, ok: true }); }
+      catch (e) { results.push({ name: name, ok: false, err: e && e.message ? e.message : String(e) }); }
+    }
+    function assert(cond, msg) { if (!cond) throw new Error(msg || 'assertion failed'); }
+    function assertEq(actual, expected, msg) {
+      if (actual !== expected) throw new Error((msg || 'eq') + ': expected ' + expected + ', got ' + actual);
+    }
+    function record(eng, names) {
+      var events = [];
+      names.forEach(function (nm) {
+        eng.on(nm, function (p) { events.push({ name: nm, payload: p }); });
+      });
+      return events;
+    }
+    function ofType(events, nm) {
+      return events.filter(function (e) { return e.name === nm; });
+    }
+    /* fake clock factory */
+    function fakeClock() {
+      var c = { t: 0 };
+      c.now = function () { return c.t; };
+      return c;
+    }
+    function seg(ms) { return { type: 'work', label: 'WORK', durationMs: ms }; }
+
+    /* ---------- compiler: all 6 modes ---------- */
+
+    test('EMOM compile: defaults → prep + 10×work(60s)', function () {
+      var segs = WT.modes.get('emom').compile({});
+      assertEq(segs.length, 11, 'count');
+      assertEq(segs[0].type, 'prep', 'prep type');
+      assertEq(segs[0].durationMs, 10000, 'prep ms');
+      assertEq(segs[1].type, 'work', 'work type');
+      assertEq(segs[1].durationMs, 60000, 'interval ms');
+      assertEq(segs[1].round, 1, 'round 1');
+      assertEq(segs[1].totalRounds, 10, 'totalRounds');
+      assertEq(segs[10].round, 10, 'last round');
+    });
+
+    test('EMOM compile: prep 0 omits prep segment', function () {
+      var segs = WT.modes.get('emom').compile({ prep: 0, rounds: 3, interval: 30 });
+      assertEq(segs.length, 3, 'count');
+      assertEq(segs[0].type, 'work', 'first is work');
+      assertEq(segs[0].durationMs, 30000, 'interval');
+    });
+
+    test('HIIT compile: defaults, no trailing rest', function () {
+      var segs = WT.modes.get('hiit').compile({});
+      assertEq(segs.length, 16, 'count: 1 prep + 8 work + 7 rest');
+      assertEq(segs[0].type, 'prep', 'prep first');
+      assertEq(segs[1].type, 'work', 'work'); assertEq(segs[1].durationMs, 30000, 'work ms');
+      assertEq(segs[2].type, 'rest', 'rest'); assertEq(segs[2].durationMs, 15000, 'rest ms');
+      assertEq(segs[2].round, 1, 'rest round');
+      var last = segs[segs.length - 1];
+      assertEq(last.type, 'work', 'last is work (no trailing rest)');
+      assertEq(last.round, 8, 'last round');
+    });
+
+    test('Tabata: oneTap preset of HIIT (20/10×8, prep 10)', function () {
+      var mode = WT.modes.get('tabata');
+      assertEq(mode.oneTap, true, 'oneTap');
+      var segs = mode.compile(mode.defaults);
+      assertEq(segs.length, 16, 'count');
+      assertEq(segs[1].durationMs, 20000, 'work 20s');
+      assertEq(segs[2].durationMs, 10000, 'rest 10s');
+      assertEq(segs[segs.length - 1].type, 'work', 'no trailing rest');
+    });
+
+    test('AMRAP compile: prep + single 12min work', function () {
+      var segs = WT.modes.get('amrap').compile({});
+      assertEq(segs.length, 2, 'count');
+      assertEq(segs[0].type, 'prep', 'prep');
+      assertEq(segs[1].durationMs, 12 * 60000, 'minutes→ms');
+      assertEq(segs[1].label, 'AMRAP', 'label');
+    });
+
+    test('TIMER compile: prep(5) + single 15min work', function () {
+      var segs = WT.modes.get('timer').compile({});
+      assertEq(segs.length, 2, 'count');
+      assertEq(segs[0].durationMs, 5000, 'prep 5s');
+      assertEq(segs[1].durationMs, 15 * 60000, 'minutes→ms');
+      assertEq(segs[1].label, 'TIMER', 'label');
+    });
+
+    test('Stopwatch compile: single open-ended work segment', function () {
+      var segs = WT.modes.get('stopwatch').compile({});
+      assertEq(segs.length, 1, 'count');
+      assertEq(segs[0].type, 'work', 'type');
+      assertEq(segs[0].label, 'STOPWATCH', 'label');
+      assert(segs[0].durationMs === null, 'durationMs null');
+    });
+
+    test('Compile clamps values to field min/max', function () {
+      var segs = WT.modes.get('emom').compile({ interval: 99999, rounds: 1000, prep: -5 });
+      assertEq(segs.length, 99, 'rounds clamped to 99, prep clamped to 0');
+      assertEq(segs[0].durationMs, 600000, 'interval clamped to 600s');
+    });
+
+    /* ---------- engine: boundary math ---------- */
+
+    test('Boundary: 59.999s vs 60.001s across an EMOM boundary', function () {
+      var segs = WT.modes.get('emom').compile({ prep: 0, interval: 60, rounds: 2 });
+      var c = fakeClock();
+      var eng = WT.engine.create({ segments: segs, now: c.now });
+      var events = record(eng, ['segmentStart']);
+      eng.start();
+      c.t = 59999; eng.tick();
+      var st = eng.getState();
+      assertEq(st.segmentIndex, 0, 'still round 1 at 59.999s');
+      assertEq(st.remainingMs, 1, 'remaining 1ms');
+      assertEq(ofType(events, 'segmentStart').length, 1, 'one segmentStart so far');
+      c.t = 60001; eng.tick();
+      st = eng.getState();
+      assertEq(st.segmentIndex, 1, 'round 2 at 60.001s');
+      var starts = ofType(events, 'segmentStart');
+      assertEq(starts.length, 2, 'two segmentStarts');
+      assertEq(starts[1].payload.boundaryPerfTime, 60000, 'boundaryPerfTime is exact boundary, not tick time');
+      assertEq(starts[1].payload.segment.round, 2, 'round payload');
+    });
+
+    test('Pause bookkeeping via totalPausedMs', function () {
+      var c = fakeClock();
+      var eng = WT.engine.create({ segments: [seg(60000)], now: c.now });
+      var events = record(eng, ['pause', 'resume']);
+      eng.start();
+      c.t = 5000; eng.tick(); eng.pause();
+      assertEq(eng.getState().status, 'paused', 'paused');
+      c.t = 7000;
+      assertEq(eng.getState().totalElapsedMs, 5000, 'elapsed frozen while paused');
+      c.t = 8000; eng.resume();
+      c.t = 12000; eng.tick();
+      var st = eng.getState();
+      assertEq(st.status, 'running', 'running again');
+      assertEq(st.totalElapsedMs, 9000, '12000 wall − 3000 paused');
+      assertEq(st.remainingMs, 51000, 'remaining');
+      assertEq(ofType(events, 'pause').length, 1, 'pause event');
+      assertEq(ofType(events, 'resume').length, 1, 'resume event');
+    });
+
+    test('Catch-up: jump 3 segments in one tick → 3 ordered segmentStarts', function () {
+      var c = fakeClock();
+      var eng = WT.engine.create({ segments: [seg(10000), seg(10000), seg(10000), seg(10000), seg(10000)], now: c.now });
+      var events = record(eng, ['segmentStart']);
+      eng.start(); // segmentStart 0
+      c.t = 35000; eng.tick(); // lands inside segment 3
+      var starts = ofType(events, 'segmentStart');
+      assertEq(starts.length, 4, 'total starts (0 + missed 1,2 + current 3)');
+      assertEq(starts[1].payload.index, 1, 'order 1');
+      assertEq(starts[2].payload.index, 2, 'order 2');
+      assertEq(starts[3].payload.index, 3, 'order 3');
+      assertEq(starts[1].payload.boundaryPerfTime, 10000, 'boundary 1');
+      assertEq(starts[2].payload.boundaryPerfTime, 20000, 'boundary 2');
+      assertEq(starts[3].payload.boundaryPerfTime, 30000, 'boundary 3');
+      assertEq(eng.getState().segmentIndex, 3, 'current index');
+    });
+
+    test('Countdown 3/2/1 emitted once each', function () {
+      var c = fakeClock();
+      var eng = WT.engine.create({ segments: [seg(10000)], now: c.now });
+      var events = record(eng, ['countdown']);
+      eng.start();
+      c.t = 6500; eng.tick();
+      assertEq(ofType(events, 'countdown').length, 0, 'nothing before 3s left');
+      c.t = 7000; eng.tick();
+      c.t = 7100; eng.tick(); // no duplicate
+      c.t = 8000; eng.tick();
+      c.t = 8999; eng.tick(); // ceil(1001/1000)=2, already fired
+      c.t = 9000; eng.tick();
+      c.t = 9500; eng.tick(); // no duplicate
+      var cds = ofType(events, 'countdown').map(function (e) { return e.payload.secondsLeft; });
+      assertEq(cds.join(','), '3,2,1', 'exactly 3,2,1 once each');
+    });
+
+    test('Countdown after catch-up: no stale values, no passed-segment values', function () {
+      var c = fakeClock();
+      var eng = WT.engine.create({ segments: [seg(10000), seg(10000)], now: c.now });
+      var events = record(eng, ['countdown']);
+      eng.start();
+      c.t = 18500; eng.tick(); // skipped seg 0 entirely; seg 1 has 1.5s left
+      c.t = 19100; eng.tick();
+      var cds = ofType(events, 'countdown').map(function (e) { return e.payload.secondsLeft; });
+      assertEq(cds.join(','), '2,1', 'only 2,1 — no stale 3, nothing from segment 0');
+    });
+
+    test('Lap capture on open-ended segment', function () {
+      var c = fakeClock();
+      var eng = WT.engine.create({ segments: WT.modes.get('stopwatch').compile({}), now: c.now });
+      var events = record(eng, ['lap']);
+      eng.start();
+      c.t = 5000; eng.lap();
+      c.t = 12000; eng.lap();
+      var lapsEv = ofType(events, 'lap');
+      assertEq(lapsEv.length, 2, 'two lap events');
+      assertEq(lapsEv[0].payload.lapMs, 5000, 'lap 1');
+      assertEq(lapsEv[1].payload.lapMs, 7000, 'lap 2 = delta since lap 1');
+      assertEq(lapsEv[1].payload.laps.length, 2, 'laps array in payload');
+      assertEq(eng.getState().laps.length, 2, 'laps in state');
+    });
+
+    test('Lap is a no-op on timed segments', function () {
+      var c = fakeClock();
+      var eng = WT.engine.create({ segments: [seg(60000)], now: c.now });
+      var events = record(eng, ['lap']);
+      eng.start();
+      c.t = 5000; eng.lap();
+      assertEq(ofType(events, 'lap').length, 0, 'no lap event');
+      assertEq(eng.getState().laps.length, 0, 'no laps');
+    });
+
+    test('remainingMs null for open-ended, counts up', function () {
+      var c = fakeClock();
+      var eng = WT.engine.create({ segments: WT.modes.get('stopwatch').compile({}), now: c.now });
+      eng.start();
+      c.t = 3000; eng.tick();
+      var st = eng.getState();
+      assert(st.remainingMs === null, 'remainingMs null');
+      assertEq(st.elapsedInSegmentMs, 3000, 'elapsed in segment');
+      assertEq(st.totalElapsedMs, 3000, 'total elapsed');
+    });
+
+    test('Finish fires exactly once (incl. after overshoot catch-up)', function () {
+      var c = fakeClock();
+      var eng = WT.engine.create({ segments: [seg(10000), seg(10000)], now: c.now });
+      var events = record(eng, ['finish', 'segmentStart']);
+      eng.start();
+      c.t = 25000; eng.tick(); // overshoots the whole workout
+      assertEq(ofType(events, 'finish').length, 1, 'finish once');
+      assertEq(ofType(events, 'segmentStart').length, 2, 'missed segmentStart 1 still emitted before finish');
+      c.t = 30000; eng.tick(); eng.tick();
+      assertEq(ofType(events, 'finish').length, 1, 'still once');
+      var st = eng.getState();
+      assertEq(st.status, 'finished', 'status');
+      assertEq(st.remainingMs, 0, 'remaining 0');
+      assertEq(st.totalElapsedMs, 20000, 'elapsed clamped to total');
+    });
+
+    test('skip() adjusts anchor; subsequent boundaries stay consistent', function () {
+      var segs = WT.modes.get('emom').compile({ prep: 10, interval: 60, rounds: 2 });
+      var c = fakeClock();
+      var eng = WT.engine.create({ segments: segs, now: c.now });
+      var events = record(eng, ['segmentStart', 'finish']);
+      eng.start(); // prep starts
+      c.t = 4000; eng.skip(); // skip prep 6s early
+      var starts = ofType(events, 'segmentStart');
+      assertEq(starts.length, 2, 'work 1 started');
+      assertEq(starts[1].payload.index, 1, 'index 1');
+      assertEq(starts[1].payload.boundaryPerfTime, 4000, 'boundary = skip time');
+      var st = eng.getState();
+      assertEq(st.segmentIndex, 1, 'in work 1');
+      assertEq(st.remainingMs, 60000, 'full interval remains');
+      c.t = 64001; eng.tick(); // 60s later → round 2
+      starts = ofType(events, 'segmentStart');
+      assertEq(starts.length, 3, 'work 2 started');
+      assertEq(starts[2].payload.boundaryPerfTime, 64000, 'shifted boundary math consistent');
+      c.t = 124001; eng.tick();
+      assertEq(ofType(events, 'finish').length, 1, 'finishes on shifted schedule');
+    });
+
+    test('skip() on last (open-ended) segment finishes; elapsed freezes', function () {
+      var c = fakeClock();
+      var eng = WT.engine.create({ segments: WT.modes.get('stopwatch').compile({}), now: c.now });
+      var events = record(eng, ['finish']);
+      eng.start();
+      c.t = 5000; eng.skip();
+      assertEq(ofType(events, 'finish').length, 1, 'finish emitted');
+      c.t = 9000;
+      var st = eng.getState();
+      assertEq(st.status, 'finished', 'status');
+      assertEq(st.totalElapsedMs, 5000, 'elapsed frozen at finish');
+    });
+
+    test('stop() → idle, stop event', function () {
+      var c = fakeClock();
+      var eng = WT.engine.create({ segments: [seg(60000)], now: c.now });
+      var events = record(eng, ['stop']);
+      eng.start();
+      c.t = 2000; eng.stop();
+      assertEq(ofType(events, 'stop').length, 1, 'stop event');
+      assertEq(eng.getState().status, 'idle', 'idle');
+    });
+
+    test('getState() is correct mid-segment without any tick', function () {
+      var segs = WT.modes.get('hiit').compile({ prep: 10, work: 30, rest: 15, rounds: 8 });
+      var c = fakeClock();
+      var eng = WT.engine.create({ segments: segs, now: c.now });
+      eng.start();
+      c.t = 47000; // 10 prep + 30 work + 7 into rest 1 — no tick() called
+      var st = eng.getState();
+      assertEq(st.segmentIndex, 2, 'rest 1');
+      assertEq(st.segment.type, 'rest', 'type');
+      assertEq(st.elapsedInSegmentMs, 7000, 'in-segment');
+      assertEq(st.remainingMs, 8000, 'remaining');
+      assertEq(st.totalElapsedMs, 47000, 'total');
+    });
+
+    return results;
+  };
+})();
+</script>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ---- 1. run + render unit tests ---- */
+  var results = window.WT_runUnitTests();
+  var list = document.getElementById('test-list');
+  var passed = 0;
+  results.forEach(function (r) {
+    var li = document.createElement('li');
+    li.className = r.ok ? 'pass' : 'fail';
+    li.textContent = r.name + (r.ok ? '' : ' — ' + r.err);
+    list.appendChild(li);
+    if (r.ok) passed++;
+  });
+  var summary = document.getElementById('test-summary');
+  summary.textContent = passed + ' / ' + results.length + ' passed';
+  summary.className = passed === results.length ? 'ok' : 'bad';
+
+  /* ---- 2. live 60s drift check ---- */
+  var driftOut = document.getElementById('drift-out');
+  var driftEng = null;
+  document.getElementById('btn-drift').addEventListener('click', function () {
+    if (driftEng) driftEng.stop();
+    driftEng = WT.engine.create({ segments: [{ type: 'work', label: 'DRIFT', durationMs: 60000 }] });
+    var wall0 = Date.now();
+    var maxDrift = 0;
+    driftEng.on('tick', function (st) {
+      var wallElapsed = Date.now() - wall0;
+      var drift = st.totalElapsedMs - wallElapsed;
+      if (Math.abs(drift) > Math.abs(maxDrift)) maxDrift = drift;
+      driftOut.textContent = 'engine ' + (st.totalElapsedMs / 1000).toFixed(1) + 's | wall ' +
+        (wallElapsed / 1000).toFixed(1) + 's | drift ' + drift.toFixed(1) + 'ms | max ' + maxDrift.toFixed(1) + 'ms';
+    });
+    driftEng.on('finish', function () {
+      driftOut.textContent = 'DONE — max drift ' + maxDrift.toFixed(1) + 'ms vs Date.now()';
+    });
+    driftEng.start();
+  });
+
+  /* ---- 3. audio bench ---- */
+  var CUES = ['countdown', 'workStart', 'restStart', 'finish', 'lap', 'pause'];
+  var packsEl = document.getElementById('packs');
+  WT.audio.getPacks().forEach(function (p) {
+    var row = document.createElement('div');
+    row.className = 'pack-row';
+    var name = document.createElement('strong');
+    name.textContent = p.name;
+    row.appendChild(name);
+    CUES.forEach(function (cue) {
+      var b = document.createElement('button');
+      b.textContent = cue;
+      b.addEventListener('click', function () {
+        WT.audio.unlock();
+        WT.audio.setPack(p.id);
+        WT.audio.playNow(cue);
+      });
+      row.appendChild(b);
+    });
+    packsEl.appendChild(row);
+  });
+
+  document.getElementById('vol').addEventListener('input', function (e) {
+    WT.audio.setVolume(e.target.value / 100);
+  });
+
+  var schedNote = document.getElementById('sched-note');
+  document.getElementById('btn-sched').addEventListener('click', function () {
+    WT.audio.unlock();
+    WT.audio.scheduleSegmentAudio(
+      { type: 'work', label: 'TEST', durationMs: 8000 },
+      performance.now(),
+      { nextType: 'rest', isLast: false }
+    );
+    schedNote.textContent = 'Armed at ' + new Date().toLocaleTimeString() +
+      ' — countdown at +5/+6/+7s, restStart at +8s. Switch tabs now.';
+  });
+  document.getElementById('btn-cancel').addEventListener('click', function () {
+    WT.audio.cancelScheduled();
+    schedNote.textContent = 'Cancelled.';
+  });
+})();
+</script>
+</body>
+</html>
