@@ -109,6 +109,12 @@ html[data-theme="retro-lcd"] {
   --run-time-weight: 700;
 }
 
+/* Monospace digits are wider than the default face — cap the size lower
+   so "0:06.1" never clips at narrow viewports. */
+html[data-theme="retro-lcd"] .run-time {
+  font-size: clamp(2.25rem, min(20vw, 30vh), 10rem);
+}
+
 /* Faux LCD ghost segments ("888:88") behind the live digits. */
 html[data-theme="retro-lcd"] .run-time::before {
   content: "88:88";

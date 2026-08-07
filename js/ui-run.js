@@ -173,6 +173,8 @@
     var info = paintSegmentVisuals(payload.segment, payload.index);
     lastNextType = info.nextType;
     lastIsLast = info.isLast;
+    /* While paused (e.g. skip during pause) stay silent — onResume schedules. */
+    if (engine && engine.getState().status === 'paused') return;
     if (WT.audio && typeof WT.audio.scheduleSegmentAudio === 'function') {
       WT.audio.scheduleSegmentAudio(payload.segment, payload.boundaryPerfTime, {
         nextType: info.nextType,
@@ -207,7 +209,9 @@
     if (engine && WT.audio && typeof WT.audio.scheduleSegmentAudio === 'function') {
       var state = engine.getState();
       if (state.segment && state.segment.durationMs != null && state.remainingMs != null) {
-        var boundaryPerfTime = performance.now() + state.remainingMs;
+        /* audio.js expects the segment START time (it adds durationMs for the
+           end), so derive a virtual start: start = (now + remaining) - duration. */
+        var boundaryPerfTime = performance.now() + state.remainingMs - state.segment.durationMs;
         WT.audio.scheduleSegmentAudio(state.segment, boundaryPerfTime, {
           nextType: lastNextType,
           isLast: lastIsLast
@@ -308,7 +312,13 @@
     var skipBtn = document.getElementById('btn-skip');
     if (skipBtn) {
       skipBtn.addEventListener('click', function () {
-        if (engine && typeof engine.skip === 'function') engine.skip();
+        if (!engine || typeof engine.skip !== 'function') return;
+        /* Drop the skipped segment's pending beeps before the new segment
+           schedules its own (segmentStart re-schedules). */
+        if (WT.audio && typeof WT.audio.cancelScheduled === 'function') {
+          try { WT.audio.cancelScheduled(); } catch (e) { /* ignore */ }
+        }
+        engine.skip();
       });
     }
 
