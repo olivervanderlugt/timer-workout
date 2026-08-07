@@ -1,0 +1,92 @@
+/* base.css — reset + token contract. FROZEN: all other CSS uses only these tokens. */
+
+:root {
+  /* Color tokens — defaults = Dark Gym theme */
+  --bg: #0d0f12;
+  --bg-raised: #16191f;
+  --fg: #f5f6f8;
+  --fg-muted: #9aa1ad;
+  --accent: #e5484d;
+  --accent-work: #e5484d;
+  --accent-rest: #3b82f6;
+  --accent-prep: #f5a524;
+  --danger: #e5484d;
+  --radius: 14px;
+  --shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+  --font-display: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  /* Derived at runtime by segment type on #screen-run */
+  --run-accent: var(--accent-prep);
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-ui);
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
+}
+
+h1, h2, h3, p, ul { margin: 0; padding: 0; }
+ul { list-style: none; }
+
+button {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+input { font-family: inherit; }
+
+/* Screen visibility — router toggles .active */
+.screen { display: none; }
+.screen.active { display: flex; }
+
+/* Shared button primitives */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 56px;
+  padding: 0 24px;
+  border-radius: var(--radius);
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+.btn-primary { background: var(--accent); color: #fff; }
+.btn-secondary { background: var(--bg-raised); color: var(--fg); }
+
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 48px;
+  min-height: 48px;
+  border-radius: 50%;
+  color: var(--fg);
+}
+
+.section-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--fg-muted);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}

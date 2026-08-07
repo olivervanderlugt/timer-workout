@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0d0f12">
+<title>Workout Timer</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%E2%8F%B1%EF%B8%8F%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="css/base.css">
+<link rel="stylesheet" href="css/layout.css">
+<link rel="stylesheet" href="css/themes.css">
+</head>
+<body>
+
+<!-- ============ HOME ============ -->
+<section id="screen-home" class="screen active">
+  <header class="home-header">
+    <h1 class="app-title">Workout Timer</h1>
+    <div id="home-clock" class="home-clock" aria-label="Current time"></div>
+    <button id="btn-settings" class="icon-btn" aria-label="Settings">
+      <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.01a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    </button>
+  </header>
+
+  <div class="mode-grid">
+    <button class="mode-tile" data-mode="emom">
+      <span class="mode-name">EMOM</span>
+      <span class="mode-desc">Every minute on the minute</span>
+    </button>
+    <button class="mode-tile" data-mode="hiit">
+      <span class="mode-name">Intervals</span>
+      <span class="mode-desc">Work / rest rounds</span>
+    </button>
+    <button class="mode-tile mode-tile-onetap" data-mode="tabata">
+      <span class="mode-name">Tabata</span>
+      <span class="mode-desc">20s / 10s &times; 8 &mdash; one tap</span>
+    </button>
+    <button class="mode-tile" data-mode="amrap">
+      <span class="mode-name">AMRAP</span>
+      <span class="mode-desc">Countdown clock</span>
+    </button>
+    <button class="mode-tile" data-mode="timer">
+      <span class="mode-name">Timer</span>
+      <span class="mode-desc">Long duration / stretching</span>
+    </button>
+    <button class="mode-tile" data-mode="stopwatch">
+      <span class="mode-name">Stopwatch</span>
+      <span class="mode-desc">Count up with laps</span>
+    </button>
+  </div>
+
+  <div class="presets-section">
+    <h2 class="section-title">My Workouts</h2>
+    <ul id="preset-list" class="preset-list"></ul>
+  </div>
+</section>
+
+<!-- ============ CONFIG ============ -->
+<section id="screen-config" class="screen">
+  <header class="config-header">
+    <button id="btn-config-back" class="icon-btn" aria-label="Back">
+      <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg>
+    </button>
+    <h2 id="config-title" class="config-title"></h2>
+  </header>
+  <form id="config-form" class="config-form"></form>
+  <p id="config-summary" class="config-summary" aria-live="polite"></p>
+  <div class="config-actions">
+    <button id="btn-save-preset" class="btn btn-secondary" type="button">Save as preset</button>
+    <button id="btn-start" class="btn btn-primary" type="button">Start</button>
+  </div>
+</section>
+
+<!-- ============ RUN ============ -->
+<section id="screen-run" class="screen" data-segment-type="prep">
+  <div id="run-progress" class="run-progress"><div class="run-progress-fill"></div></div>
+  <div id="run-clock" class="run-clock" aria-hidden="true"></div>
+  <div class="run-main">
+    <div id="run-label" class="run-label" aria-live="polite"></div>
+    <div id="run-time" class="run-time">0:00</div>
+    <div id="run-round" class="run-round" aria-live="polite"></div>
+    <div id="run-next" class="run-next"></div>
+  </div>
+  <ul id="lap-list" class="lap-list"></ul>
+  <div class="run-controls">
+    <button id="btn-stop" class="icon-btn run-btn" aria-label="Stop">
+      <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="2"/></svg>
+    </button>
+    <button id="btn-pause" class="icon-btn run-btn run-btn-primary" aria-label="Pause">
+      <svg class="ico-pause" viewBox="0 0 24 24" width="34" height="34" fill="currentColor" aria-hidden="true"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>
+      <svg class="ico-play" viewBox="0 0 24 24" width="34" height="34" fill="currentColor" aria-hidden="true" style="display:none"><path d="M7 4l13 8-13 8z"/></svg>
+    </button>
+    <button id="btn-skip" class="icon-btn run-btn" aria-label="Skip segment">
+      <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor" aria-hidden="true"><path d="M5 4l10 8-10 8z"/><rect x="17" y="4" width="3" height="16" rx="1"/></svg>
+    </button>
+    <button id="btn-lap" class="icon-btn run-btn" aria-label="Lap" style="display:none">
+      <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5"/><path d="M9 2h6"/></svg>
+    </button>
+    <button id="btn-fullscreen" class="icon-btn run-btn" aria-label="Toggle fullscreen">
+      <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
+    </button>
+  </div>
+</section>
+
+<!-- ============ SETTINGS ============ -->
+<section id="screen-settings" class="screen">
+  <header class="config-header">
+    <button id="btn-settings-close" class="icon-btn" aria-label="Close settings">
+      <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6L6 18"/><path d="M6 6l12 12"/></svg>
+    </button>
+    <h2 class="config-title">Settings</h2>
+  </header>
+  <div class="settings-body">
+    <h3 class="section-title">Theme</h3>
+    <div id="theme-list" class="theme-list"></div>
+    <h3 class="section-title">Sound</h3>
+    <div id="sound-list" class="sound-list"></div>
+    <label class="volume-row">
+      <span>Volume</span>
+      <input id="volume-slider" type="range" min="0" max="100" value="80">
+    </label>
+    <p id="wake-status" class="wake-status"></p>
+  </div>
+</section>
+
+<script src="js/util.js"></script>
+<script src="js/storage.js"></script>
+<script src="js/modes.js"></script>
+<script src="js/engine.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/themes.js"></script>
+<script src="js/presets.js"></script>
+<script src="js/clock.js"></script>
+<script src="js/system.js"></script>
+<script src="js/ui-home.js"></script>
+<script src="js/ui-config.js"></script>
+<script src="js/ui-run.js"></script>
+<script src="js/ui-settings.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
