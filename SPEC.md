@@ -39,7 +39,8 @@ Script order in index.html: util → storage → modes → engine → audio → 
 { type: 'prep'|'work'|'rest',   // drives color + sound
   label: 'WORK',                // big text under digits
   durationMs: 60000 | null,     // null = open-ended (stopwatch)
-  round: 3, totalRounds: 8 }    // optional → "ROUND 3/8"
+  round: 3, totalRounds: 8,     // optional → "ROUND 3/8"
+  roundLabel: 'INTERVAL' }      // optional, replaces the word "ROUND"
 ```
 
 ## WT.modes (js/modes.js)
@@ -48,10 +49,10 @@ Script order in index.html: util → storage → modes → engine → audio → 
 - `hiit`   — work (30), rest (15), rounds (8), prep (10). Compile: `[prep] + rounds × [work, rest]`, **no trailing rest**.
 - `tabata` — one-tap (`oneTap: true`, skips config): HIIT with work 20 / rest 10 / rounds 8 / prep 10.
 - `amrap`  — minutes (12), prep (10). Compile: `[prep, work(minutes)]`, label "AMRAP".
-- `timer`  — minutes (15), prep (5). Long-duration (stretching). Label "TIMER".
+- `timer`  — minutes (15), beep (toggle, off), every (s, default 60), prep (5). Long-duration (stretching). Label "TIMER". Compile: `[prep, work(minutes)]` with the beep off; with it on the same total is sliced into `ceil(total ÷ every)` work segments so a cue lands on each boundary — for switching stretching pose without entering every interval by hand. The count is derived, never asked for. Total duration is identical either way: a duration that does not divide evenly ends on a short final segment. Slices carry `round`/`totalRounds` plus `roundLabel: 'INTERVAL'`.
 - `stopwatch` — no fields. Compile: `[{type:'work', label:'STOPWATCH', durationMs:null}]`.
 
-Field descriptor: `{key, label, type: 'duration'|'int'|'minutes', default, min, max}`. `WT.modes.get(id)`; `compile(config)` returns `Segment[]`. ui-config renders forms generically from `fields` — never hardcodes modes.
+Field descriptor: `{key, label, type: 'duration'|'int'|'minutes'|'toggle', default, min, max, showWhen?}`. `'toggle'` is 0|1 and renders as a single on/off button. `showWhen: {key, value}` hides a field until another field holds that value (presentational only — `compile()` ignores it and still resolves the value). `WT.modes.get(id)`; `compile(config)` returns `Segment[]`. ui-config renders forms generically from `fields` — never hardcodes modes.
 
 ## WT.engine (js/engine.js)
 `WT.engine.create({segments, now})` → instance. `now` defaults to `() => performance.now()` (injectable for tests only).

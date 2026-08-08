@@ -57,7 +57,7 @@
     var roundEl = document.getElementById('run-round');
     if (roundEl) {
       roundEl.textContent = (segment.round && segment.totalRounds)
-        ? ('ROUND ' + segment.round + '/' + segment.totalRounds)
+        ? ((segment.roundLabel || 'ROUND') + ' ' + segment.round + '/' + segment.totalRounds)
         : '';
     }
 

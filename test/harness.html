@@ -147,6 +147,65 @@
       assertEq(segs[1].label, 'TIMER', 'label');
     });
 
+    test('TIMER interval beep off: unchanged single segment', function () {
+      var segs = WT.modes.get('timer').compile({ minutes: 20, beep: 0, every: 60 });
+      assertEq(segs.length, 2, 'prep + one work segment');
+      assertEq(segs[1].durationMs, 20 * 60000, 'whole duration in one piece');
+      assert(segs[1].round === undefined, 'no interval numbering when off');
+    });
+
+    test('TIMER interval beep: 20min ÷ 60s → 20 stretches, duration preserved', function () {
+      var segs = WT.modes.get('timer').compile({ minutes: 20, prep: 0, beep: 1, every: 60 });
+      assertEq(segs.length, 20, 'one segment per interval, none entered by hand');
+      var total = segs.reduce(function (sum, s) { return sum + s.durationMs; }, 0);
+      assertEq(total, 20 * 60000, 'total duration unchanged by slicing');
+      assertEq(segs[0].durationMs, 60000, 'first is a full period');
+      assertEq(segs[0].round, 1, 'numbered from 1');
+      assertEq(segs[19].round, 20, 'last interval number');
+      assertEq(segs[0].totalRounds, 20, 'total shown on every segment');
+      assertEq(segs[0].roundLabel, 'INTERVAL', 'run screen says INTERVAL, not ROUND');
+      assertEq(segs[0].type, 'work', 'all work — every boundary cues a pose change');
+    });
+
+    test('TIMER interval beep: 30s period doubles the interval count', function () {
+      var segs = WT.modes.get('timer').compile({ minutes: 10, prep: 0, beep: 1, every: 30 });
+      assertEq(segs.length, 20, '10min ÷ 30s');
+      assertEq(segs[0].durationMs, 30000, 'period honoured');
+    });
+
+    test('TIMER interval beep: remainder becomes a short final stretch', function () {
+      /* 5 min ÷ 90s = 3 full stretches + 30s left over. */
+      var segs = WT.modes.get('timer').compile({ minutes: 5, prep: 0, beep: 1, every: 90 });
+      assertEq(segs.length, 4, 'ceil, so the remainder gets its own segment');
+      assertEq(segs[0].durationMs, 90000, 'full period');
+      assertEq(segs[2].durationMs, 90000, 'full period');
+      assertEq(segs[3].durationMs, 30000, 'remainder, not a full period');
+      var total = segs.reduce(function (sum, s) { return sum + s.durationMs; }, 0);
+      assertEq(total, 5 * 60000, 'never overruns the set duration');
+      assertEq(segs[3].totalRounds, 4, 'remainder counted in the total');
+    });
+
+    test('TIMER interval beep: prep still leads, and is not sliced', function () {
+      var segs = WT.modes.get('timer').compile({ minutes: 2, prep: 10, beep: 1, every: 60 });
+      assertEq(segs.length, 3, 'prep + 2 stretches');
+      assertEq(segs[0].type, 'prep', 'prep first');
+      assertEq(segs[0].durationMs, 10000, 'prep untouched');
+      assert(segs[0].round === undefined, 'prep is not an interval');
+      assertEq(segs[1].round, 1, 'numbering starts after prep');
+    });
+
+    test('TIMER interval beep: period longer than the run is one stretch', function () {
+      var segs = WT.modes.get('timer').compile({ minutes: 1, prep: 0, beep: 1, every: 600 });
+      assertEq(segs.length, 1, 'no empty trailing segment');
+      assertEq(segs[0].durationMs, 60000, 'clipped to the run length');
+    });
+
+    test('TIMER interval beep: period clamps to field bounds', function () {
+      var segs = WT.modes.get('timer').compile({ minutes: 1, prep: 0, beep: 1, every: 0 });
+      assertEq(segs[0].durationMs, 5000, 'every clamped up to the 5s minimum');
+      assertEq(segs.length, 12, '60s ÷ 5s');
+    });
+
     test('Stopwatch compile: single open-ended work segment', function () {
       var segs = WT.modes.get('stopwatch').compile({});
       assertEq(segs.length, 1, 'count');
