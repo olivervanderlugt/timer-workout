@@ -1,12 +1,16 @@
 /* modes.js — WT.modes: mode registry + config→Segment[] compiler. Agent A.
  *
  * Each mode: { id, name, description, fields, defaults, compile, oneTap? }
- * Field descriptor: { key, label, type: 'duration'|'int'|'minutes', default, min, max }
+ * Field descriptor: { key, label, type: 'duration'|'int'|'minutes'|'toggle',
+ *                     default, min, max, showWhen? }
  *   - 'duration' fields are in SECONDS, 'minutes' fields in MINUTES (converted here),
- *     'int' fields are plain counts.
+ *     'int' fields are plain counts, 'toggle' is 0|1.
+ *   - showWhen: {key, value} — the form hides this field until that key holds
+ *     that value. Purely presentational; compile() ignores it.
  * compile(config) resolves missing keys from defaults, clamps every value to the
  * field's [min, max], and returns Segment[]:
- *   { type: 'prep'|'work'|'rest', label, durationMs|null, round?, totalRounds? }
+ *   { type: 'prep'|'work'|'rest', label, durationMs|null, round?, totalRounds?,
+ *     roundLabel? }
  * Zero-duration segments (prep 0, rest 0) are omitted from the output.
  */
 (function () {
@@ -16,8 +20,14 @@
   var SEC = 1000;
   var MIN_MS = 60000;
 
-  function field(key, label, type, def, min, max) {
-    return { key: key, label: label, type: type, default: def, min: min, max: max };
+  function field(key, label, type, def, min, max, showWhen) {
+    var f = { key: key, label: label, type: type, default: def, min: min, max: max };
+    if (showWhen) f.showWhen = showWhen;
+    return f;
+  }
+
+  function toggleField(key, label, def) {
+    return field(key, label, 'toggle', def, 0, 1);
   }
 
   function clampField(f, value) {
@@ -90,13 +100,46 @@
     };
   }
 
-  /* amrap / timer: [prep] + single work segment of `minutes`. */
+  /* amrap: [prep] + single work segment of `minutes`. */
   function makeSingleCompile(fields, label) {
     return function (config) {
       var c = resolveConfig(fields, config);
       var segs = [];
       pushPrep(segs, c.prep);
       segs.push({ type: 'work', label: label, durationMs: c.minutes * MIN_MS });
+      return segs;
+    };
+  }
+
+  /* timer: [prep] + one long work segment, or — with the interval beep on —
+   * that same duration sliced into `every`-second stretches so a cue lands on
+   * each boundary. The point is a long run of many intervals without entering
+   * them one by one, so the count is derived from duration ÷ period rather
+   * than asked for. Total duration is unchanged either way: a duration that
+   * does not divide evenly ends on a short final stretch instead of
+   * overrunning. */
+  function makeTimerCompile(fields, label) {
+    return function (config) {
+      var c = resolveConfig(fields, config);
+      var segs = [];
+      pushPrep(segs, c.prep);
+
+      var totalMs = c.minutes * MIN_MS;
+      var periodMs = c.every * SEC;
+
+      if (!c.beep || periodMs <= 0) {
+        segs.push({ type: 'work', label: label, durationMs: totalMs });
+        return segs;
+      }
+
+      var count = Math.ceil(totalMs / periodMs);
+      for (var i = 1; i <= count; i++) {
+        segs.push({
+          type: 'work', label: label,
+          durationMs: Math.min(periodMs, totalMs - (i - 1) * periodMs),
+          round: i, totalRounds: count, roundLabel: 'INTERVAL'
+        });
+      }
       return segs;
     };
   }
@@ -134,6 +177,8 @@
 
   var timerFields = [
     field('minutes', 'Minutes', 'minutes', 15, 1, 180),
+    toggleField('beep', 'Interval beep', 0),
+    field('every', 'Beep every (sec)', 'duration', 60, 5, 600, { key: 'beep', value: 1 }),
     field('prep', 'Prep (sec)', 'duration', 5, 0, 120)
   ];
 
@@ -167,9 +212,9 @@
     },
     {
       id: 'timer', name: 'Timer',
-      description: 'Simple long countdown — stretching, holds, rest days.',
+      description: 'Long countdown — stretching, holds, rest days. Optional beep every N seconds to switch pose.',
       fields: timerFields, defaults: defaultsOf(timerFields),
-      compile: makeSingleCompile(timerFields, 'TIMER')
+      compile: makeTimerCompile(timerFields, 'TIMER')
     },
     {
       id: 'stopwatch', name: 'Stopwatch',

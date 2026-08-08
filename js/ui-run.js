@@ -12,9 +12,11 @@
   var isOpenEndedSingle = false;
   var finished = false;
   var wakeHintShown = false;
-  var lastNextType = null;
-  var lastIsLast = false;
   var runClockTimer = null;
+  var audioComplete = true;   // false when the cue horizon truncated the run
+  var scheduledThrough = -1;  // last segment index whose cues are queued
+  var soundHintShown = false;
+  var visibilityBound = false;
 
   /* ---------------------------------------------------------------- */
   /* helpers                                                            */
@@ -55,7 +57,7 @@
     var roundEl = document.getElementById('run-round');
     if (roundEl) {
       roundEl.textContent = (segment.round && segment.totalRounds)
-        ? ('ROUND ' + segment.round + '/' + segment.totalRounds)
+        ? ((segment.roundLabel || 'ROUND') + ' ' + segment.round + '/' + segment.totalRounds)
         : '';
     }
 
@@ -83,18 +85,35 @@
     showWakeHint(res && res.reason);
   }
 
-  function showWakeHint(reason) {
-    if (wakeHintShown) return;
-    wakeHintShown = true;
+  function showToast(text) {
     var run = document.getElementById('screen-run');
     if (!run) return;
     var el = document.createElement('div');
     el.className = 'wake-hint-toast';
-    el.textContent = 'Screen may turn off (wake lock unavailable)';
+    el.textContent = text;
     run.appendChild(el);
     setTimeout(function () {
       if (el.parentNode) el.parentNode.removeChild(el);
     }, 4000);
+  }
+
+  function showWakeHint(reason) {
+    if (wakeHintShown) return;
+    wakeHintShown = true;
+    showToast('Screen may turn off (wake lock unavailable)');
+  }
+
+  /* On an iOS version without the audioSession API the hardware silent switch
+   * mutes every cue and nothing in the page can override it — say so once
+   * rather than let the timer look broken. */
+  function maybeShowSilentSwitchHint() {
+    if (soundHintShown) return;
+    if (!WT.audio || typeof WT.audio.silentSwitchRisk !== 'function') return;
+    var risky = false;
+    try { risky = WT.audio.silentSwitchRisk(); } catch (e) { return; }
+    if (!risky) return;
+    soundHintShown = true;
+    showToast('No sound? Turn off the silent switch');
   }
 
   function acquireWakeLock() {
@@ -168,19 +187,73 @@
     }
   }
 
+  /* Queue every remaining cue in one go. The core of the fix: Web Audio keeps
+   * playing what is already queued while JS is throttled or frozen, so the
+   * schedule must not depend on events arriving on time.
+   *
+   * `topUp` extends a schedule the horizon truncated, leaving queued nodes
+   * alone. That distinction matters: a top-up lands on a segment boundary,
+   * exactly when that boundary's tone is sounding, and cancelling there would
+   * clip the beep on every segment of a long run. */
+  function rescheduleAudio(topUp) {
+    if (!engine || !WT.audio) return;
+    if (typeof WT.audio.scheduleWorkoutAudio !== 'function' ||
+        typeof WT.audio.buildScheduleItems !== 'function') return;
+
+    var state;
+    try { state = engine.getState(); } catch (e) { return; }
+    if (!state || state.status !== 'running' || !state.segment) return;
+
+    var items = WT.audio.buildScheduleItems(
+      segmentsRef, state.segmentIndex, state.elapsedInSegmentMs, performance.now()
+    );
+
+    if (topUp) {
+      var already = scheduledThrough - state.segmentIndex + 1;
+      if (already > 0) items = items.slice(already);
+      if (!items.length) return;
+    } else if (typeof WT.audio.cancelScheduled === 'function') {
+      try { WT.audio.cancelScheduled(); } catch (e) { /* ignore */ }
+    }
+
+    var first = topUp ? scheduledThrough + 1 : state.segmentIndex;
+    var res;
+    try { res = WT.audio.scheduleWorkoutAudio(items); } catch (e) { return; }
+    if (!res) return;
+    scheduledThrough = first + res.scheduled - 1;
+    audioComplete = res.complete !== false;
+  }
+
+  /* Bring the AudioContext back before re-queueing: while it is suspended its
+   * clock is frozen, so anything scheduled against it would land in the past. */
+  function resumeAudioThenReschedule() {
+    if (!WT.audio || typeof WT.audio.unlock !== 'function') {
+      rescheduleAudio();
+      return;
+    }
+    var p;
+    try { p = WT.audio.unlock(); } catch (e) { p = null; }
+    if (p && typeof p.then === 'function') {
+      p.then(function () { rescheduleAudio(); }, function () { /* ignore */ });
+    } else {
+      rescheduleAudio();
+    }
+  }
+
+  /* Screen lock, app switch and tab switch all suspend the context and freeze
+   * the ticker; coming back is the moment to restore both. */
+  function onVisibilityChange() {
+    if (document.visibilityState !== 'visible') return;
+    if (!engine) return;
+    resumeAudioThenReschedule();
+  }
+
   function onSegmentStart(payload) {
     if (!payload || !payload.segment) return;
-    var info = paintSegmentVisuals(payload.segment, payload.index);
-    lastNextType = info.nextType;
-    lastIsLast = info.isLast;
-    /* While paused (e.g. skip during pause) stay silent — onResume schedules. */
-    if (engine && engine.getState().status === 'paused') return;
-    if (WT.audio && typeof WT.audio.scheduleSegmentAudio === 'function') {
-      WT.audio.scheduleSegmentAudio(payload.segment, payload.boundaryPerfTime, {
-        nextType: info.nextType,
-        isLast: info.isLast
-      });
-    }
+    paintSegmentVisuals(payload.segment, payload.index);
+    /* Cues for this segment were queued up front. Only extend the tail when
+     * the horizon truncated the run and more of it is now within reach. */
+    if (!audioComplete) rescheduleAudio(true);
   }
 
   function onCountdown() {
@@ -206,18 +279,7 @@
     if (screenRun) screenRun.classList.remove('paused');
     setPauseIcon(false);
     acquireWakeLock();
-    if (engine && WT.audio && typeof WT.audio.scheduleSegmentAudio === 'function') {
-      var state = engine.getState();
-      if (state.segment && state.segment.durationMs != null && state.remainingMs != null) {
-        /* audio.js expects the segment START time (it adds durationMs for the
-           end), so derive a virtual start: start = (now + remaining) - duration. */
-        var boundaryPerfTime = performance.now() + state.remainingMs - state.segment.durationMs;
-        WT.audio.scheduleSegmentAudio(state.segment, boundaryPerfTime, {
-          nextType: lastNextType,
-          isLast: lastIsLast
-        });
-      }
-    }
+    resumeAudioThenReschedule();
   }
 
   function onFinish() {
@@ -313,12 +375,10 @@
     if (skipBtn) {
       skipBtn.addEventListener('click', function () {
         if (!engine || typeof engine.skip !== 'function') return;
-        /* Drop the skipped segment's pending beeps before the new segment
-           schedules its own (segmentStart re-schedules). */
-        if (WT.audio && typeof WT.audio.cancelScheduled === 'function') {
-          try { WT.audio.cancelScheduled(); } catch (e) { /* ignore */ }
-        }
+        /* skip() rewinds the anchor, so every boundary after it moves — the
+           whole queued schedule is stale and has to be rebuilt. */
         engine.skip();
+        rescheduleAudio();
       });
     }
 
@@ -375,8 +435,8 @@
     metaRef = params.meta || {};
     finished = false;
     wakeHintShown = false;
-    lastNextType = null;
-    lastIsLast = false;
+    audioComplete = true;
+    scheduledThrough = -1;
 
     bindDomOnce();
 
@@ -415,21 +475,24 @@
     bindEngine();
 
     var st = engine.getState();
-    if (st.segment) {
-      var info = paintSegmentVisuals(st.segment, st.segmentIndex);
-      lastNextType = info.nextType;
-      lastIsLast = info.isLast;
-    }
+    if (st.segment) paintSegmentVisuals(st.segment, st.segmentIndex);
     onTick(st);
 
-    if (WT.audio && typeof WT.audio.unlock === 'function') {
-      try { WT.audio.unlock(); } catch (e) { /* ignore */ }
+    if (!visibilityBound) {
+      visibilityBound = true;
+      document.addEventListener('visibilitychange', onVisibilityChange);
     }
 
     startRunClock();
     acquireWakeLock();
 
     engine.start();
+
+    /* After start(), so the engine is running and the schedule covers the run
+       from segment 0. unlock() first: on iOS the context is created suspended
+       and its clock reads 0 until it resumes. */
+    resumeAudioThenReschedule();
+    maybeShowSilentSwitchHint();
   }
 
   function hide() {
@@ -440,6 +503,10 @@
     }
     if (WT.audio && typeof WT.audio.cancelScheduled === 'function') {
       try { WT.audio.cancelScheduled(); } catch (e) { /* ignore */ }
+    }
+    if (visibilityBound) {
+      visibilityBound = false;
+      document.removeEventListener('visibilitychange', onVisibilityChange);
     }
     releaseWakeLock();
     engine = null;

@@ -312,6 +312,29 @@
 .stepper-btn:hover { background: color-mix(in srgb, var(--fg) 14%, transparent); }
 .stepper-btn:active { transform: scale(0.92); }
 
+/* boolean field — same footprint as a full stepper so rows line up */
+.toggle-btn {
+  min-width: 172px;
+  min-height: 44px;
+  padding: 0 var(--sp-3);
+  border-radius: calc(var(--radius) - 2px);
+  background: color-mix(in srgb, var(--fg) 8%, transparent);
+  font-size: 1.05rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.1s ease, background-color 0.1s ease, color 0.1s ease;
+}
+.toggle-btn:hover { background: color-mix(in srgb, var(--fg) 14%, transparent); }
+.toggle-btn:active { transform: scale(0.96); }
+.toggle-btn[data-on="true"] {
+  background: var(--accent);
+  color: var(--accent-fg, var(--bg));
+}
+
 /* reserved width so rows never jiggle when digits change */
 .stepper-value {
   min-width: 84px;

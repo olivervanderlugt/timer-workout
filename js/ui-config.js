@@ -50,27 +50,76 @@
   }
 
   function fieldDisplay(field, value) {
+    if (field.type === 'toggle') return value ? 'On' : 'Off';
     if (field.type === 'duration') return formatDurationSec(value);
     if (field.type === 'minutes') return value + ' min';
     return String(value);
+  }
+
+  /* A field with showWhen is only part of the form while its controlling
+   * field holds the given value — asking "beep every how long?" is noise
+   * until the beep is switched on. */
+  function fieldVisible(field) {
+    if (!field.showWhen) return true;
+    return currentConfig[field.showWhen.key] === field.showWhen.value;
+  }
+
+  function visibleFields(mode) {
+    return (mode.fields || []).filter(fieldVisible);
   }
 
   function buildForm(mode, initial) {
     elForm.innerHTML = '';
     currentConfig = {};
     var fields = mode.fields || [];
+    var rows = {};
 
+    /* Resolve every value first: a showWhen row needs its controller's value
+     * before it can decide whether to show itself. */
     fields.forEach(function (field) {
       var raw = (initial && initial[field.key] !== undefined) ? initial[field.key] : field.default;
       currentConfig[field.key] = clampField(field, raw);
+    });
 
+    function applyVisibility() {
+      fields.forEach(function (field) {
+        var row = rows[field.key];
+        if (row) row.style.display = fieldVisible(field) ? '' : 'none';
+      });
+    }
+
+    fields.forEach(function (field) {
       var row = document.createElement('div');
       row.className = 'field-row';
+      rows[field.key] = row;
 
       var label = document.createElement('label');
       label.className = 'field-label';
       label.textContent = field.label;
       row.appendChild(label);
+
+      if (field.type === 'toggle') {
+        var toggleBtn = document.createElement('button');
+        toggleBtn.type = 'button';
+        toggleBtn.className = 'toggle-btn';
+        var paint = function () {
+          var on = !!currentConfig[field.key];
+          toggleBtn.textContent = fieldDisplay(field, currentConfig[field.key]);
+          toggleBtn.dataset.on = on ? 'true' : 'false';
+          toggleBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
+        };
+        paint();
+        toggleBtn.setAttribute('aria-label', field.label);
+        toggleBtn.addEventListener('click', function () {
+          currentConfig[field.key] = currentConfig[field.key] ? 0 : 1;
+          paint();
+          applyVisibility();
+          updateSummary();
+        });
+        row.appendChild(toggleBtn);
+        elForm.appendChild(row);
+        return;
+      }
 
       var stepper = document.createElement('div');
       stepper.className = 'stepper';
@@ -109,6 +158,8 @@
 
       elForm.appendChild(row);
     });
+
+    applyVisibility();
   }
 
   function updateSummary() {
@@ -127,8 +178,7 @@
       else totalMs += seg.durationMs;
     });
 
-    var fields = currentMode.fields || [];
-    var parts = fields.map(function (field) {
+    var parts = visibleFields(currentMode).map(function (field) {
       return fieldDisplay(field, currentConfig[field.key]) + ' ' + String(field.label).toLowerCase();
     });
 

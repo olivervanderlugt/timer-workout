@@ -41,10 +41,12 @@
 <div id="packs"></div>
 <p>
   <button id="btn-sched">Schedule beeps in 5s (background-tab test)</button>
+  <button id="btn-sched-run">Schedule a whole 5×(8s+5s) run</button>
   <button id="btn-cancel">cancelScheduled()</button>
   <span id="sched-note"></span>
 </p>
 <p class="hint">"Schedule" arms an 8s fake segment: countdown beeps at +5/+6/+7s, restStart tone at +8s — all pre-scheduled on the AudioContext clock. Switch to another tab immediately; the beeps must still fire on time.</p>
+<p class="hint">"Whole run" queues every cue of a 65s multi-segment run in one call, which is what the run screen does. Switch tabs — or lock the phone — right after arming: every boundary must still sound, not just the first.</p>
 
 <script src="../js/util.js"></script>
 <script src="../js/storage.js"></script>
@@ -143,6 +145,65 @@
       assertEq(segs[0].durationMs, 5000, 'prep 5s');
       assertEq(segs[1].durationMs, 15 * 60000, 'minutes→ms');
       assertEq(segs[1].label, 'TIMER', 'label');
+    });
+
+    test('TIMER interval beep off: unchanged single segment', function () {
+      var segs = WT.modes.get('timer').compile({ minutes: 20, beep: 0, every: 60 });
+      assertEq(segs.length, 2, 'prep + one work segment');
+      assertEq(segs[1].durationMs, 20 * 60000, 'whole duration in one piece');
+      assert(segs[1].round === undefined, 'no interval numbering when off');
+    });
+
+    test('TIMER interval beep: 20min ÷ 60s → 20 stretches, duration preserved', function () {
+      var segs = WT.modes.get('timer').compile({ minutes: 20, prep: 0, beep: 1, every: 60 });
+      assertEq(segs.length, 20, 'one segment per interval, none entered by hand');
+      var total = segs.reduce(function (sum, s) { return sum + s.durationMs; }, 0);
+      assertEq(total, 20 * 60000, 'total duration unchanged by slicing');
+      assertEq(segs[0].durationMs, 60000, 'first is a full period');
+      assertEq(segs[0].round, 1, 'numbered from 1');
+      assertEq(segs[19].round, 20, 'last interval number');
+      assertEq(segs[0].totalRounds, 20, 'total shown on every segment');
+      assertEq(segs[0].roundLabel, 'INTERVAL', 'run screen says INTERVAL, not ROUND');
+      assertEq(segs[0].type, 'work', 'all work — every boundary cues a pose change');
+    });
+
+    test('TIMER interval beep: 30s period doubles the interval count', function () {
+      var segs = WT.modes.get('timer').compile({ minutes: 10, prep: 0, beep: 1, every: 30 });
+      assertEq(segs.length, 20, '10min ÷ 30s');
+      assertEq(segs[0].durationMs, 30000, 'period honoured');
+    });
+
+    test('TIMER interval beep: remainder becomes a short final stretch', function () {
+      /* 5 min ÷ 90s = 3 full stretches + 30s left over. */
+      var segs = WT.modes.get('timer').compile({ minutes: 5, prep: 0, beep: 1, every: 90 });
+      assertEq(segs.length, 4, 'ceil, so the remainder gets its own segment');
+      assertEq(segs[0].durationMs, 90000, 'full period');
+      assertEq(segs[2].durationMs, 90000, 'full period');
+      assertEq(segs[3].durationMs, 30000, 'remainder, not a full period');
+      var total = segs.reduce(function (sum, s) { return sum + s.durationMs; }, 0);
+      assertEq(total, 5 * 60000, 'never overruns the set duration');
+      assertEq(segs[3].totalRounds, 4, 'remainder counted in the total');
+    });
+
+    test('TIMER interval beep: prep still leads, and is not sliced', function () {
+      var segs = WT.modes.get('timer').compile({ minutes: 2, prep: 10, beep: 1, every: 60 });
+      assertEq(segs.length, 3, 'prep + 2 stretches');
+      assertEq(segs[0].type, 'prep', 'prep first');
+      assertEq(segs[0].durationMs, 10000, 'prep untouched');
+      assert(segs[0].round === undefined, 'prep is not an interval');
+      assertEq(segs[1].round, 1, 'numbering starts after prep');
+    });
+
+    test('TIMER interval beep: period longer than the run is one stretch', function () {
+      var segs = WT.modes.get('timer').compile({ minutes: 1, prep: 0, beep: 1, every: 600 });
+      assertEq(segs.length, 1, 'no empty trailing segment');
+      assertEq(segs[0].durationMs, 60000, 'clipped to the run length');
+    });
+
+    test('TIMER interval beep: period clamps to field bounds', function () {
+      var segs = WT.modes.get('timer').compile({ minutes: 1, prep: 0, beep: 1, every: 0 });
+      assertEq(segs[0].durationMs, 5000, 'every clamped up to the 5s minimum');
+      assertEq(segs.length, 12, '60s ÷ 5s');
     });
 
     test('Stopwatch compile: single open-ended work segment', function () {
@@ -342,6 +403,69 @@
       assertEq(eng.getState().status, 'idle', 'idle');
     });
 
+    /* ---------- audio: whole-run schedule building ---------- */
+
+    test('buildScheduleItems: whole run queued from segment 0', function () {
+      var segs = WT.modes.get('hiit').compile({ prep: 10, work: 30, rest: 15, rounds: 2 });
+      var items = WT.audio.buildScheduleItems(segs, 0, 0, 1000);
+      assertEq(items.length, segs.length, 'every segment queued, not just the first');
+      assertEq(items[0].boundaryPerfTime, 1000, 'first boundary is now');
+      assertEq(items[1].boundaryPerfTime, 11000, 'prep 10s later');
+      assertEq(items[2].boundaryPerfTime, 41000, 'work 30s after that');
+      assertEq(items[0].nextType, 'work', 'prep is followed by work');
+      assertEq(items[1].nextType, 'rest', 'work is followed by rest');
+      assert(items[0].isLast === false, 'first is not last');
+      assert(items[items.length - 1].isLast === true, 'last segment flagged');
+      assertEq(items[items.length - 1].nextType, null, 'nothing follows the last');
+    });
+
+    test('buildScheduleItems: resumes mid-segment without shifting later boundaries', function () {
+      var segs = [seg(60000), seg(30000), seg(60000)];
+      /* 20s into segment 0, asked at perf 25000 → segment 0 began at 5000. */
+      var items = WT.audio.buildScheduleItems(segs, 0, 20000, 25000);
+      assertEq(items[0].boundaryPerfTime, 5000, 'virtual start = now − elapsed');
+      assertEq(items[0].boundaryPerfTime + segs[0].durationMs, 65000, 'segment 0 still ends on time');
+      assertEq(items[1].boundaryPerfTime, 65000, 'segment 1 starts where 0 ends');
+      assertEq(items[2].boundaryPerfTime, 95000, 'segment 2 follows');
+    });
+
+    test('buildScheduleItems: starts at the current segment, not the beginning', function () {
+      var segs = [seg(10000), seg(10000), seg(10000)];
+      var items = WT.audio.buildScheduleItems(segs, 2, 4000, 50000);
+      assertEq(items.length, 1, 'only the remaining segment');
+      assertEq(items[0].boundaryPerfTime, 46000, 'boundary derived from elapsed');
+      assert(items[0].isLast === true, 'is last');
+    });
+
+    test('buildScheduleItems: stops at an open-ended segment', function () {
+      var open = { type: 'work', label: 'AMRAP', durationMs: null };
+      var items = WT.audio.buildScheduleItems([seg(10000), open, seg(10000)], 0, 0, 0);
+      assertEq(items.length, 1, 'nothing past an unknowable boundary');
+      assertEq(WT.audio.buildScheduleItems([open], 0, 0, 0).length, 0, 'open-ended alone queues nothing');
+    });
+
+    test('buildScheduleItems: empty and out-of-range input is safe', function () {
+      assertEq(WT.audio.buildScheduleItems([], 0, 0, 0).length, 0, 'no segments');
+      assertEq(WT.audio.buildScheduleItems(null, 0, 0, 0).length, 0, 'null segments');
+      assertEq(WT.audio.buildScheduleItems([seg(1000)], 5, 0, 0).length, 0, 'index past the end');
+      assertEq(WT.audio.buildScheduleItems([seg(1000)], -1, 0, 0).length, 1, 'negative index clamps to 0');
+    });
+
+    test('buildScheduleItems: matches engine boundaries after a skip', function () {
+      var segs = WT.modes.get('emom').compile({ prep: 10, interval: 60, rounds: 2 });
+      var c = fakeClock();
+      var eng = WT.engine.create({ segments: segs, now: c.now });
+      var events = record(eng, ['segmentStart']);
+      eng.start();
+      c.t = 4000; eng.skip(); // skip prep 6s early
+      var st = eng.getState();
+      var items = WT.audio.buildScheduleItems(segs, st.segmentIndex, st.elapsedInSegmentMs, c.t);
+      var starts = ofType(events, 'segmentStart');
+      assertEq(items[0].boundaryPerfTime, starts[1].payload.boundaryPerfTime,
+        'queued boundary equals the engine boundary after skip');
+      assertEq(items[1].boundaryPerfTime, 64000, 'next boundary on the shifted schedule');
+    });
+
     test('getState() is correct mid-segment without any tick', function () {
       var segs = WT.modes.get('hiit').compile({ prep: 10, work: 30, rest: 15, rounds: 8 });
       var c = fakeClock();
@@ -438,6 +562,20 @@
     schedNote.textContent = 'Armed at ' + new Date().toLocaleTimeString() +
       ' — countdown at +5/+6/+7s, restStart at +8s. Switch tabs now.';
   });
+  document.getElementById('btn-sched-run').addEventListener('click', function () {
+    WT.audio.unlock().then(function () {
+      var segs = [];
+      for (var i = 1; i <= 5; i++) {
+        segs.push({ type: 'work', label: 'WORK', durationMs: 8000, round: i, totalRounds: 5 });
+        if (i < 5) segs.push({ type: 'rest', label: 'REST', durationMs: 5000, round: i, totalRounds: 5 });
+      }
+      var items = WT.audio.buildScheduleItems(segs, 0, 0, performance.now());
+      var res = WT.audio.scheduleWorkoutAudio(items);
+      schedNote.textContent = 'Armed ' + res.scheduled + '/' + items.length + ' segments at ' +
+        new Date().toLocaleTimeString() + ' — 65s of cues. Switch tabs now; all of them must fire.';
+    });
+  });
+
   document.getElementById('btn-cancel').addEventListener('click', function () {
     WT.audio.cancelScheduled();
     schedNote.textContent = 'Cancelled.';
