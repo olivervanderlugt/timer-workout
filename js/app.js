@@ -88,12 +88,15 @@
       }
     });
 
-    /* Safety-net audio unlock on first gesture (iOS autoplay policy). */
-    var unlockOnce = function () {
-      if (WT.audio && WT.audio.unlock) WT.audio.unlock();
-      document.removeEventListener('pointerdown', unlockOnce);
-    };
-    document.addEventListener('pointerdown', unlockOnce);
+    /* Safety-net audio unlock on every gesture (iOS autoplay policy). Not
+     * one-shot: the context can be interrupted again at any point — a call,
+     * a screen lock — and each later tap is another chance to revive it.
+     * unlock() is a no-op once the context is already running. */
+    document.addEventListener('pointerdown', function () {
+      if (WT.audio && WT.audio.unlock) {
+        try { WT.audio.unlock(); } catch (e) { /* ignore */ }
+      }
+    });
 
     window.addEventListener('popstate', onPopState);
     window.addEventListener('keydown', onKeyDown);

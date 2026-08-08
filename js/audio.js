@@ -2,18 +2,40 @@
  *
  * Public API:
  *   init()                       lazy no-op setup (ctx is created on demand)
- *   unlock()                     call from a user gesture: creates/resumes AudioContext
+ *   unlock()                     call from a user gesture: creates/resumes the
+ *                                AudioContext. Returns a Promise<boolean> that
+ *                                settles once the context is really running —
+ *                                await it before scheduling, because
+ *                                ctx.currentTime is frozen while suspended.
  *   setPack(id) / getPacks()     'classic' | 'chime' | 'referee' | '8bit'
  *   setVolume(v)                 0..1 → master gain
+ *   buildScheduleItems(segments, fromIndex, elapsedInSegmentMs, nowPerf)
+ *   scheduleWorkoutAudio(items)  queue many segments at once (see below)
  *   scheduleSegmentAudio(segment, boundaryPerfTime, opts)
  *   cancelScheduled()            stop all pending scheduled nodes (pause/skip/stop)
  *   playNow(cueName)             immediate cue: any pack cue incl. 'lap'/'pause'
  *   tone(spec[, whenCtxTime])    low-level synth: {freq, ms, wave, gain}
+ *   silentSwitchRisk()           true on iOS with no audioSession API
+ *
+ * Scheduling model — why the whole run is queued at once:
+ *   Web Audio plays whatever is already queued on its own clock even when JS
+ *   timers are throttled to a crawl (backgrounded tab) or frozen outright
+ *   (locked phone). Queueing one segment at a time on each engine segmentStart
+ *   therefore loses every cue after the first backgrounded segment: the event
+ *   arrives late and its cues land in the past, where scheduleCue drops them.
+ *   So ui-run queues the entire remaining workout up front through
+ *   scheduleWorkoutAudio(), and re-queues on the events that invalidate that
+ *   schedule: resume, skip, and the context returning from a suspension.
+ *
+ * scheduleWorkoutAudio(items) — items are {segment, boundaryPerfTime,
+ *   nextType, isLast} in order, as produced by buildScheduleItems(). Cues are
+ *   queued up to HORIZON_S ahead so a very long run does not create thousands
+ *   of nodes at once; the returned {scheduled, complete} reports whether the
+ *   tail was truncated, so the caller can top up as the run advances.
  *
  * scheduleSegmentAudio(segment, boundaryPerfTime, opts):
- *   Called by ui-run on each engine segmentStart. `boundaryPerfTime` is the
- *   exact performance.now() time the segment began (from the engine payload).
- *   Schedules, at absolute AudioContext times:
+ *   Queues one segment. `boundaryPerfTime` is the performance.now() time that
+ *   segment begins. At absolute AudioContext times:
  *     - 3 countdown beeps at segmentEnd − 3s / − 2s / − 1s
  *     - the boundary tone AT segment end.
  *   The boundary cue depends on what FOLLOWS this segment, which only the
@@ -22,6 +44,9 @@
  *   otherwise → 'workStart'. Open-ended segments (durationMs null) schedule
  *   nothing. Cues whose time is already in the past are skipped.
  *   perf→ctx conversion: ctxTime = perfMs/1000 + (ctx.currentTime − performance.now()/1000).
+ *   That offset shifts whenever the context is suspended — ctx.currentTime
+ *   stops while performance.now() runs on — which is the other reason a
+ *   resumed context must re-schedule instead of trusting what it queued before.
  *
  * If Web Audio is unavailable, every function is a safe no-op.
  */
@@ -37,6 +62,11 @@
   var volume = 0.8;
   var currentPack = 'classic';
   var scheduled = []; // [{osc, gain}] pending/playing nodes
+
+  /* How far ahead cues are queued. Long enough to survive any plausible
+   * screen-lock or backgrounded stretch mid-workout, short enough that a
+   * 99-round run does not allocate every oscillator at once. */
+  var HORIZON_S = 900;
 
   /* note helper: t = offset (s) within the cue */
   function n(t, freq, ms, wave, gain) {
@@ -99,10 +129,36 @@
     }
   };
 
+  /* iOS mutes Web Audio when the hardware silent switch is on unless the page
+   * declares itself as playback rather than ambient audio. Must be set before
+   * the context exists. Unsupported everywhere else, hence the feature test. */
+  function claimPlaybackSession() {
+    try {
+      if (navigator.audioSession && 'type' in navigator.audioSession) {
+        navigator.audioSession.type = 'playback';
+      }
+    } catch (e) { /* ignore */ }
+  }
+
+  /* True where the silent switch will mute cues and we cannot opt out of it:
+   * an iOS device (incl. iPadOS masquerading as a Mac) without audioSession. */
+  function silentSwitchRisk() {
+    if (!supported) return false;
+    try {
+      if (navigator.audioSession && 'type' in navigator.audioSession) return false;
+      var ua = navigator.userAgent || '';
+      return /iPad|iPhone|iPod/.test(ua) ||
+        (/Macintosh/.test(ua) && typeof document !== 'undefined' && 'ontouchend' in document);
+    } catch (e) {
+      return false;
+    }
+  }
+
   function ensureCtx() {
     if (!supported) return null;
     if (!ctx) {
       try {
+        claimPlaybackSession();
         ctx = new Ctor();
         master = ctx.createGain();
         master.gain.value = volume;
@@ -122,12 +178,24 @@
      * playback (must originate from a user gesture on iOS). */
   }
 
+  /* Resolves true once the context is running. Callers that schedule after a
+   * suspension must wait for it: while suspended ctx.currentTime is frozen, so
+   * the perf→ctx offset is stale and every cue would land in the past. */
   function unlock() {
     var c = ensureCtx();
-    if (!c) return;
-    if (c.state === 'suspended' || c.state === 'interrupted') {
-      try { c.resume(); } catch (e) { /* ignore */ }
+    if (!c) return Promise.resolve(false);
+    if (c.state !== 'suspended' && c.state !== 'interrupted') {
+      return Promise.resolve(c.state === 'running');
     }
+    try {
+      var p = c.resume();
+      if (p && typeof p.then === 'function') {
+        return p.then(function () { return true; }, function () { return false; });
+      }
+    } catch (e) {
+      return Promise.resolve(false);
+    }
+    return Promise.resolve(c.state === 'running');
   }
 
   function setPack(id) {
@@ -213,6 +281,52 @@
     scheduleCue(boundaryCue, endCtx);
   }
 
+  /* Pure: turn "we are `elapsedInSegmentMs` into segment `fromIndex` at
+   * `nowPerf`" into the ordered cue list for the rest of the run. Stops at the
+   * first open-ended segment — nothing after one has a knowable time. No
+   * AudioContext involved, so this is unit-testable headlessly. */
+  function buildScheduleItems(segments, fromIndex, elapsedInSegmentMs, nowPerf) {
+    var items = [];
+    if (!segments || !segments.length) return items;
+    var i = fromIndex;
+    if (!(i >= 0)) i = 0;
+    var cursor = nowPerf - (elapsedInSegmentMs || 0);
+    for (; i < segments.length; i++) {
+      var s = segments[i];
+      if (!s || s.durationMs == null) break;
+      var next = segments[i + 1];
+      items.push({
+        segment: s,
+        boundaryPerfTime: cursor,
+        nextType: next ? next.type : null,
+        isLast: !next
+      });
+      cursor += s.durationMs;
+    }
+    return items;
+  }
+
+  /* Queue the whole remaining run. Returns {scheduled, complete}; complete is
+   * false when the horizon cut the tail off, so the caller knows to top up. */
+  function scheduleWorkoutAudio(items) {
+    var out = { scheduled: 0, complete: true };
+    if (!supported || !items || !items.length) return out;
+    var c = ensureCtx();
+    if (!c) return out;
+    var limit = c.currentTime + HORIZON_S;
+    for (var i = 0; i < items.length; i++) {
+      var it = items[i];
+      if (!it || !it.segment || it.segment.durationMs == null) continue;
+      if (perfToCtx(it.boundaryPerfTime + it.segment.durationMs) > limit) {
+        out.complete = false;
+        break;
+      }
+      scheduleSegmentAudio(it.segment, it.boundaryPerfTime, it);
+      out.scheduled++;
+    }
+    return out;
+  }
+
   function cancelScheduled() {
     var pending = scheduled.slice();
     scheduled.length = 0;
@@ -239,8 +353,11 @@
     getPacks: getPacks,
     setVolume: setVolume,
     tone: tone,
+    buildScheduleItems: buildScheduleItems,
+    scheduleWorkoutAudio: scheduleWorkoutAudio,
     scheduleSegmentAudio: scheduleSegmentAudio,
     cancelScheduled: cancelScheduled,
-    playNow: playNow
+    playNow: playNow,
+    silentSwitchRisk: silentSwitchRisk
   };
 })();

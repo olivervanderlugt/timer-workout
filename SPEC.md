@@ -6,8 +6,8 @@ Zero-dependency static workout-timer site. Works hosted (GitHub Pages/Netlify) *
 - **No ES modules** (`type="module"` breaks on `file://`). Classic scripts only.
 - **No external resources** of any kind. Fonts = system stacks. Icons = inline SVG. Sounds = Web Audio synthesis.
 - **Timer math from wall clock only**: state derives from a `performance.now()` anchor + prefix sums. Never accumulate ticks.
-- Audio cues for the current segment are **pre-scheduled on the AudioContext clock** so they fire on time in throttled background tabs.
-- `AudioContext` must be created/resumed from a user gesture (`WT.audio.unlock()` on Start).
+- Audio cues for the **whole remaining run** are pre-scheduled on the AudioContext clock, not one segment at a time, so they fire on time in a throttled background tab or a frozen locked phone where no `segmentStart` arrives to schedule the next one.
+- `AudioContext` must be created/resumed from a user gesture (`WT.audio.unlock()` on Start). It can be suspended again at any point (screen lock, call, tab switch), so the run screen re-unlocks and re-schedules on `visibilitychange`, and `unlock()` resolves only once the context is really running — scheduling against a suspended context puts every cue in the past.
 - Frozen files (do not edit; contracts live there): `index.html`, `css/base.css`, `js/util.js`, `js/storage.js`, this file.
 
 ## Files & ownership
@@ -63,9 +63,12 @@ Field descriptor: `{key, label, type: 'duration'|'int'|'minutes', default, min, 
 - `segmentStart.boundaryPerfTime` = the precise performance.now() time the boundary falls on (for audio scheduling).
 
 ## WT.audio (js/audio.js)
-- `init()` lazy; `unlock()` (call from user gesture — create/resume ctx); `setPack(id)`; `setVolume(0..1)` (master gain); `getPacks()` → `[{id, name}]`.
-- `scheduleSegmentAudio(segment, boundaryPerfTime)` — called on each segmentStart: schedule at absolute AudioContext times (convert via `ctx.currentTime - performance.now()/1000` offset) the 3 countdown beeps at segEnd−3/−2/−1 s and the boundary tone at segEnd (workStart/restStart per next segment type, or `finish` if last). Skip for open-ended segments.
-- `cancelScheduled()` — stop all pending nodes (on pause/skip/stop).
+- `init()` lazy; `unlock()` (call from user gesture — create/resume ctx; returns `Promise<boolean>` resolving when the ctx is running); `setPack(id)`; `setVolume(0..1)` (master gain); `getPacks()` → `[{id, name}]`.
+- `buildScheduleItems(segments, fromIndex, elapsedInSegmentMs, nowPerf)` — pure, no ctx: derives `[{segment, boundaryPerfTime, nextType, isLast}]` for the rest of the run from where the engine currently is. Stops at the first open-ended segment. Unit-tested headlessly.
+- `scheduleWorkoutAudio(items)` — queue the whole remaining run at once, up to a 15-minute horizon; returns `{scheduled, complete}` so the caller can top up on a later `segmentStart` when `complete` is false.
+- `scheduleSegmentAudio(segment, boundaryPerfTime, opts)` — one segment: schedule at absolute AudioContext times (convert via `ctx.currentTime - performance.now()/1000` offset) the 3 countdown beeps at segEnd−3/−2/−1 s and the boundary tone at segEnd (workStart/restStart per `opts.nextType`, or `finish` if `opts.isLast`). Skip for open-ended segments.
+- `cancelScheduled()` — stop all pending nodes (on pause/stop, and before every re-schedule).
+- `silentSwitchRisk()` — true on iOS without the `audioSession` API, where the hardware silent switch mutes cues and the page cannot override it. Where the API exists, the context is created with `navigator.audioSession.type = 'playback'` so the switch is bypassed.
 - `playNow(cueName)` — immediate cue: 'lap', 'pause', or any pack cue (settings preview).
 - Synth: `tone({freq, ms, wave, gain})` osc + gain envelope (5ms attack, exp release, no clicks). Cues may be arrays (arpeggio).
 - 4 packs: `classic` (square gym beep), `chime` (soft sine), `referee` (sawtooth buzzer), `8bit` (square arpeggios). Cue names: `countdown, workStart, restStart, finish, lap, pause`.
@@ -105,4 +108,4 @@ Reads validate shape; corrupt values fall back to defaults, never crash.
 
 ## Session state machine
 Statuses: `idle | running | paused | finished` (prep is just a running segment of type 'prep').
-Key transitions: start → unlock audio + wake lock + schedule prep audio; segmentStart → recolor via data-segment-type, update label/round/next, reschedule audio; pause → cancelScheduled + release wake lock; resume → reschedule remainder; finish → fanfare + summary state; stop → confirm if >10s elapsed, home.
+Key transitions: start → unlock audio + wake lock + schedule the whole run's audio; segmentStart → recolor via data-segment-type, update label/round/next (audio is already queued — only tops up when the horizon truncated the run); pause → cancelScheduled + release wake lock; resume → unlock audio + re-schedule the remainder; skip → re-schedule (every boundary moved); visibilitychange→visible → unlock audio + re-schedule; finish → fanfare + summary state; stop → confirm if >10s elapsed, home.
