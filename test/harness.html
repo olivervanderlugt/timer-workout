@@ -480,6 +480,126 @@
       assertEq(st.totalElapsedMs, 47000, 'total');
     });
 
+    /* ---------- stepper: 1s small step, snap-to-multiple big step ---------- */
+
+    function fieldOf(modeId, key) {
+      var fields = WT.modes.get(modeId).fields;
+      for (var i = 0; i < fields.length; i++) if (fields[i].key === key) return fields[i];
+      throw new Error('no field ' + key + ' on ' + modeId);
+    }
+
+    test('Small step moves a duration field by exactly 1 second', function () {
+      var work = fieldOf('hiit', 'work');
+      assertEq(WT.modes.stepValue(work, 5, 1, false), 6, 'up');
+      assertEq(WT.modes.stepValue(work, 6, -1, false), 5, 'down');
+    });
+
+    test('Small step walks the physio progression: 5s → 6s → 7s', function () {
+      var work = fieldOf('hiit', 'work');
+      var v = WT.modes.stepValue(work, 5, 1, false);
+      assertEq(WT.modes.stepValue(work, v, 1, false), 7, 'two presses');
+    });
+
+    test('Big step up from an off-grid value snaps onto the grid', function () {
+      var work = fieldOf('hiit', 'work');
+      assertEq(WT.modes.stepValue(work, 7, 1, true), 15, '7 → 15');
+      assertEq(WT.modes.stepValue(work, 1, 1, true), 15, '1 → 15');
+    });
+
+    test('Big step up from an exact multiple advances one whole step', function () {
+      var work = fieldOf('hiit', 'work');
+      assertEq(WT.modes.stepValue(work, 15, 1, true), 30, '15 → 30');
+      assertEq(WT.modes.stepValue(work, 30, 1, true), 45, '30 → 45');
+    });
+
+    test('Big step down snaps to the multiple below, off-grid or on', function () {
+      var work = fieldOf('hiit', 'work');
+      assertEq(WT.modes.stepValue(work, 20, -1, true), 15, '20 → 15');
+      assertEq(WT.modes.stepValue(work, 45, -1, true), 30, '45 → 30');
+    });
+
+    test('Big step down from the lowest multiple lands on the field minimum', function () {
+      assertEq(WT.modes.stepValue(fieldOf('hiit', 'work'), 15, -1, true), 1, 'work floors at 1');
+      assertEq(WT.modes.stepValue(fieldOf('hiit', 'rest'), 15, -1, true), 0, 'rest floors at 0');
+    });
+
+    test('One big press back up undoes that drop to the floor', function () {
+      var work = fieldOf('hiit', 'work');
+      assertEq(WT.modes.stepValue(work, WT.modes.stepValue(work, 15, -1, true), 1, true), 15, 'reversible');
+    });
+
+    test('Steps never leave the field bounds', function () {
+      var work = fieldOf('hiit', 'work');
+      assertEq(WT.modes.stepValue(work, 600, 1, true), 600, 'big up at max');
+      assertEq(WT.modes.stepValue(work, 600, 1, false), 600, 'small up at max');
+      assertEq(WT.modes.stepValue(work, 1, -1, false), 1, 'small down at min');
+      assertEq(WT.modes.stepValue(fieldOf('hiit', 'rest'), 0, -1, true), 0, 'big down at min');
+    });
+
+    test('Rounds and minutes snap on their own grid, not the seconds one', function () {
+      var rounds = fieldOf('hiit', 'rounds');
+      assertEq(WT.modes.stepValue(rounds, 8, 1, true), 10, 'rounds 8 → 10');
+      assertEq(WT.modes.stepValue(rounds, 10, -1, true), 5, 'rounds 10 → 5');
+      assertEq(WT.modes.stepValue(fieldOf('amrap', 'minutes'), 12, 1, true), 15, 'minutes 12 → 15');
+    });
+
+    test('A 1-second work interval survives compile instead of clamping to 5', function () {
+      var segs = WT.modes.get('hiit').compile({ work: 1, rest: 1, rounds: 3, prep: 0 });
+      assertEq(segs.length, 5, 'work,rest,work,rest,work');
+      assertEq(segs[0].durationMs, 1000, 'work is a real 1s');
+      assertEq(segs[1].durationMs, 1000, 'rest is a real 1s');
+    });
+
+    /* ---------- countdown lead vs very short segments ---------- */
+
+    test('A 1s segment gets no countdown beeps, only its boundary cue', function () {
+      assertEq(WT.audio.countdownLeadsFor(1000).length, 0, 'no lead fits inside 1s');
+    });
+
+    test('Countdown beeps are kept only while they fall inside the segment', function () {
+      assertEq(WT.audio.countdownLeadsFor(2000).join(','), '1', '2s → one beep');
+      assertEq(WT.audio.countdownLeadsFor(3000).join(','), '2,1', '3s → two beeps');
+      assertEq(WT.audio.countdownLeadsFor(4000).join(','), '3,2,1', '4s → full lead');
+      assertEq(WT.audio.countdownLeadsFor(60000).join(','), '3,2,1', 'long → full lead');
+    });
+
+    test('A 1s on / 1s off run queues one cue per boundary and no strays', function () {
+      var segs = WT.modes.get('hiit').compile({ work: 1, rest: 1, rounds: 3, prep: 0 });
+      var items = WT.audio.buildScheduleItems(segs, 0, 0, 0);
+      assertEq(items.length, 5, 'every segment queued');
+      var totalCountdowns = 0;
+      items.forEach(function (it) {
+        totalCountdowns += WT.audio.countdownLeadsFor(it.segment.durationMs).length;
+      });
+      assertEq(totalCountdowns, 0, 'no countdown beeps anywhere in a 1s/1s run');
+    });
+
+    test('A 1s/1s run advances one segment per second under the 250ms ticker', function () {
+      var segs = WT.modes.get('hiit').compile({ work: 1, rest: 1, rounds: 3, prep: 0 });
+      var c = fakeClock();
+      var eng = WT.engine.create({ segments: segs, now: c.now });
+      var events = record(eng, ['segmentStart', 'finish']);
+      eng.start();
+      /* tick at the real 250ms cadence across the whole 5s run */
+      for (var t = 250; t <= 5000; t += 250) { c.t = t; eng.tick(); }
+      var starts = ofType(events, 'segmentStart');
+      assertEq(starts.length, 5, 'every segment started');
+      assertEq(starts.map(function (e) { return e.payload.segment.type; }).join(','),
+        'work,rest,work,rest,work', 'alternating, in order');
+      assertEq(ofType(events, 'finish').length, 1, 'finished once');
+    });
+
+    test('A 1s segment emits only the final countdown tick, never 3 or 2', function () {
+      var segs = WT.modes.get('hiit').compile({ work: 1, rest: 1, rounds: 2, prep: 0 });
+      var c = fakeClock();
+      var eng = WT.engine.create({ segments: segs, now: c.now });
+      var events = record(eng, ['countdown']);
+      eng.start();
+      for (var t = 250; t <= 3000; t += 250) { c.t = t; eng.tick(); }
+      var seen = ofType(events, 'countdown').map(function (e) { return e.payload.secondsLeft; });
+      assertEq(seen.filter(function (s) { return s > 1; }).length, 0, 'no 3 or 2 on a 1s segment');
+    });
+
     return results;
   };
 })();
