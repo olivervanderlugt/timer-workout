@@ -6,9 +6,17 @@
 <meta name="theme-color" content="#000000">
 <title>Workout Timer</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%E2%8F%B1%EF%B8%8F%3C/text%3E%3C/svg%3E">
-<link rel="stylesheet" href="css/base.css">
-<link rel="stylesheet" href="css/layout.css">
-<link rel="stylesheet" href="css/themes.css">
+<!-- Asset URLs carry ?v=<date>. GitHub Pages serves these files with
+     cache-control: max-age=600 behind a shared CDN, so without the query a
+     browser can revalidate index.html and still reuse the old JS — the page then
+     renders byte-identical to the previous deploy and the change looks like it
+     never shipped. BUMP ON EVERY DEPLOY, all 17 at once:
+       sed -i '' -E 's/\?v=[0-9]+/?v=YYYYMMDD/g' index.html
+     (SPEC.md lists this file as frozen; these version queries are the one
+     sanctioned exception, added 2026-10-04 with the owner's sign-off.) -->
+<link rel="stylesheet" href="css/base.css?v=20261004">
+<link rel="stylesheet" href="css/layout.css?v=20261004">
+<link rel="stylesheet" href="css/themes.css?v=20261004">
 </head>
 <body>
 
@@ -123,19 +131,19 @@
   </div>
 </section>
 
-<script src="js/util.js"></script>
-<script src="js/storage.js"></script>
-<script src="js/modes.js"></script>
-<script src="js/engine.js"></script>
-<script src="js/audio.js"></script>
-<script src="js/themes.js"></script>
-<script src="js/presets.js"></script>
-<script src="js/clock.js"></script>
-<script src="js/system.js"></script>
-<script src="js/ui-home.js"></script>
-<script src="js/ui-config.js"></script>
-<script src="js/ui-run.js"></script>
-<script src="js/ui-settings.js"></script>
-<script src="js/app.js"></script>
+<script src="js/util.js?v=20261004"></script>
+<script src="js/storage.js?v=20261004"></script>
+<script src="js/modes.js?v=20261004"></script>
+<script src="js/engine.js?v=20261004"></script>
+<script src="js/audio.js?v=20261004"></script>
+<script src="js/themes.js?v=20261004"></script>
+<script src="js/presets.js?v=20261004"></script>
+<script src="js/clock.js?v=20261004"></script>
+<script src="js/system.js?v=20261004"></script>
+<script src="js/ui-home.js?v=20261004"></script>
+<script src="js/ui-config.js?v=20261004"></script>
+<script src="js/ui-run.js?v=20261004"></script>
+<script src="js/ui-settings.js?v=20261004"></script>
+<script src="js/app.js?v=20261004"></script>
 </body>
 </html>

@@ -21,3 +21,18 @@ A zero-dependency workout timer web app. Works hosted as a static site **and** o
 ## Development
 
 Plain HTML/CSS/JS, classic script tags, single `window.WT` namespace. Architecture and module contracts are documented in [SPEC.md](SPEC.md). Engine/compiler unit tests and an audio bench live in `test/harness.html` — open it in a browser.
+
+## Deploying
+
+Asset URLs in `index.html` carry a `?v=<date>` query. GitHub Pages serves them
+with `cache-control: max-age=600` behind a shared CDN, so without it a browser
+can revalidate `index.html` and still reuse the previous deploy's JS — the page
+then renders byte-identical to the old app and the change looks like it never
+shipped. Bump all 17 in one go before pushing:
+
+```sh
+sed -i '' -E 's/\?v=[0-9]+/?v='"$(date +%Y%m%d)"'/g' index.html
+```
+
+Query strings are honoured on `file://` too, so the offline local-file copy
+keeps working.
