@@ -38,8 +38,21 @@
     return WT.util.clamp(v, lo, hi);
   }
 
-  function stepFor(field) {
-    return field.type === 'duration' ? 5 : 1;
+  /* Spoken unit for a field's step, so a screen reader hears "by 1 second"
+   * rather than a bare "by 1". */
+  function unitName(field, n) {
+    var one = field.type === 'minutes' ? 'minute' : (field.type === 'int' ? '' : 'second');
+    if (!one) return '';
+    return ' ' + one + (n === 1 ? '' : 's');
+  }
+
+  function stepDescription(field, dir, big) {
+    var verb = dir > 0 ? 'Increase ' : 'Decrease ';
+    if (!big) return verb + field.label + ' by 1' + unitName(field, 1);
+    var snap = WT.modes.snapFor(field);
+    if (!snap) return verb + field.label + ' by ' + WT.modes.BIG_FIXED + unitName(field, WT.modes.BIG_FIXED);
+    return verb + field.label + ' to the ' + (dir > 0 ? 'next' : 'previous') +
+      ' multiple of ' + snap + unitName(field, snap);
   }
 
   function formatDurationSec(sec) {
@@ -124,36 +137,35 @@
       var stepper = document.createElement('div');
       stepper.className = 'stepper';
 
-      var minusBtn = document.createElement('button');
-      minusBtn.type = 'button';
-      minusBtn.className = 'stepper-btn';
-      minusBtn.textContent = '−';
-      minusBtn.setAttribute('aria-label', 'Decrease ' + field.label);
-
       var valueEl = document.createElement('span');
       valueEl.className = 'stepper-value';
       valueEl.textContent = fieldDisplay(field, currentConfig[field.key]);
 
-      var plusBtn = document.createElement('button');
-      plusBtn.type = 'button';
-      plusBtn.className = 'stepper-btn';
-      plusBtn.textContent = '+';
-      plusBtn.setAttribute('aria-label', 'Increase ' + field.label);
-
-      function applyDelta(sign) {
-        var step = stepFor(field);
-        var next = clampField(field, currentConfig[field.key] + sign * step);
+      /* Two sizes per direction: the inner pair moves by 1 for fine work (a
+       * physio adding a second a week), the outer pair jumps along the grid so
+       * a long rest is a few taps rather than a hundred. */
+      function press(dir, big) {
+        var next = WT.modes.stepValue(field, currentConfig[field.key], dir, big);
         currentConfig[field.key] = next;
         valueEl.textContent = fieldDisplay(field, next);
         updateSummary();
       }
 
-      minusBtn.addEventListener('click', function () { applyDelta(-1); });
-      plusBtn.addEventListener('click', function () { applyDelta(1); });
+      function stepBtn(dir, big, glyph) {
+        var b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'stepper-btn' + (big ? ' stepper-btn-big' : '');
+        b.textContent = glyph;
+        b.setAttribute('aria-label', stepDescription(field, dir, big));
+        b.addEventListener('click', function () { press(dir, big); });
+        return b;
+      }
 
-      stepper.appendChild(minusBtn);
+      stepper.appendChild(stepBtn(-1, true, '−−'));
+      stepper.appendChild(stepBtn(-1, false, '−'));
       stepper.appendChild(valueEl);
-      stepper.appendChild(plusBtn);
+      stepper.appendChild(stepBtn(1, false, '+'));
+      stepper.appendChild(stepBtn(1, true, '++'));
       row.appendChild(stepper);
 
       elForm.appendChild(row);

@@ -36,7 +36,8 @@
  * scheduleSegmentAudio(segment, boundaryPerfTime, opts):
  *   Queues one segment. `boundaryPerfTime` is the performance.now() time that
  *   segment begins. At absolute AudioContext times:
- *     - 3 countdown beeps at segmentEnd − 3s / − 2s / − 1s
+ *     - countdown beeps at segmentEnd − 3s / − 2s / − 1s, but only the ones
+ *       that fall inside the segment (see countdownLeadsFor)
  *     - the boundary tone AT segment end.
  *   The boundary cue depends on what FOLLOWS this segment, which only the
  *   caller knows, so it is passed via opts = { nextType: 'work'|'rest'|null,
@@ -266,6 +267,24 @@
     return perfMs / 1000 + (ctx.currentTime - performance.now() / 1000);
   }
 
+  /* Pure: which of the 3/2/1 countdown beeps actually fit inside a segment of
+   * this length. A beep is kept only while it falls strictly INSIDE the
+   * segment — on a 1s stretch the −3s and −2s beeps would land before the
+   * segment even began, and since the whole run is queued up front they are no
+   * longer harmlessly dropped as past: they would be real cues piling onto the
+   * PREVIOUS segment's boundary, turning 1s-on/1s-off into one unbroken buzz.
+   * So: ≥4s gets the full 3/2/1 lead, 3s gets 2/1, 2s gets 1, 1s gets none and
+   * is marked by its boundary tone alone. No AudioContext involved, so this is
+   * unit-testable headlessly. */
+  function countdownLeadsFor(durationMs) {
+    var leads = [];
+    if (durationMs == null) return leads;
+    for (var s = 3; s >= 1; s--) {
+      if (s * 1000 < durationMs) leads.push(s);
+    }
+    return leads;
+  }
+
   function scheduleSegmentAudio(segment, boundaryPerfTime, opts) {
     if (!supported) return;
     if (!segment || segment.durationMs == null) return; // open-ended: nothing to schedule
@@ -273,8 +292,9 @@
     if (!c) return;
     opts = opts || {};
     var endCtx = perfToCtx(boundaryPerfTime + segment.durationMs);
-    for (var s = 3; s >= 1; s--) {
-      scheduleCue('countdown', endCtx - s);
+    var leads = countdownLeadsFor(segment.durationMs);
+    for (var i = 0; i < leads.length; i++) {
+      scheduleCue('countdown', endCtx - leads[i]);
     }
     var boundaryCue = opts.isLast ? 'finish'
       : (opts.nextType === 'rest' ? 'restStart' : 'workStart');
@@ -354,6 +374,7 @@
     setVolume: setVolume,
     tone: tone,
     buildScheduleItems: buildScheduleItems,
+    countdownLeadsFor: countdownLeadsFor,
     scheduleWorkoutAudio: scheduleWorkoutAudio,
     scheduleSegmentAudio: scheduleSegmentAudio,
     cancelScheduled: cancelScheduled,

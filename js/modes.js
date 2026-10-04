@@ -7,6 +7,9 @@
  *     'int' fields are plain counts, 'toggle' is 0|1.
  *   - showWhen: {key, value} — the form hides this field until that key holds
  *     that value. Purely presentational; compile() ignores it.
+ * stepValue(field, value, dir, big) is the stepper's arithmetic, kept here with
+ * the descriptors rather than in the form so the bounds and the grid stay in
+ * one place.
  * compile(config) resolves missing keys from defaults, clamps every value to the
  * field's [min, max], and returns Segment[]:
  *   { type: 'prep'|'work'|'rest', label, durationMs|null, round?, totalRounds?,
@@ -35,6 +38,30 @@
     if (!isFinite(n)) n = f.default;
     n = Math.round(n);
     return WT.util.clamp(n, f.min, f.max);
+  }
+
+  /* How far a BIG stepper press (−− / ++) moves, per field type: the press
+   * lands on the adjacent multiple of this number, so an off-grid value tidies
+   * onto the grid on its first press. The small presses are always ±1.
+   *
+   * ONE KNOB: set an entry to 0 to make that type's big press a plain fixed
+   * step of BIG_FIXED instead of a snap. Nothing else needs changing. */
+  var BIG_SNAP = { duration: 15, minutes: 5, int: 5 };
+  var BIG_FIXED = 15;
+
+  /* Next value for a single stepper press. dir is -1 or +1; big is true for
+   * the −− / ++ pair. Always clamped to the field's own [min, max], so the
+   * lowest multiple steps down onto the field minimum rather than past it. */
+  function stepValue(field, value, dir, big) {
+    var n = Number(value);
+    if (!isFinite(n)) n = field.default;
+    var snap = big ? (BIG_SNAP[field.type] || 0) : 0;
+    var next;
+    if (!big) next = n + dir;
+    else if (!snap) next = n + dir * BIG_FIXED;
+    else if (dir > 0) next = (Math.floor(n / snap) + 1) * snap;
+    else next = (Math.ceil(n / snap) - 1) * snap;
+    return clampField(field, next);
   }
 
   /* Merge config over defaults, clamp everything to field bounds. */
@@ -151,20 +178,20 @@
   /* ---- field sets ---- */
 
   var emomFields = [
-    field('interval', 'Interval (sec)', 'duration', 60, 5, 600),
+    field('interval', 'Interval (sec)', 'duration', 60, 1, 600),
     field('rounds', 'Rounds', 'int', 10, 1, 99),
     field('prep', 'Prep (sec)', 'duration', 10, 0, 120)
   ];
 
   var hiitFields = [
-    field('work', 'Work (sec)', 'duration', 30, 5, 600),
+    field('work', 'Work (sec)', 'duration', 30, 1, 600),
     field('rest', 'Rest (sec)', 'duration', 15, 0, 600),
     field('rounds', 'Rounds', 'int', 8, 1, 99),
     field('prep', 'Prep (sec)', 'duration', 10, 0, 120)
   ];
 
   var tabataFields = [
-    field('work', 'Work (sec)', 'duration', 20, 5, 600),
+    field('work', 'Work (sec)', 'duration', 20, 1, 600),
     field('rest', 'Rest (sec)', 'duration', 10, 0, 600),
     field('rounds', 'Rounds', 'int', 8, 1, 99),
     field('prep', 'Prep (sec)', 'duration', 10, 0, 120)
@@ -231,5 +258,9 @@
     return null;
   }
 
-  WT.modes = { list: list, get: get };
+  /* The form asks for this only to tell a screen reader how far a big press
+   * moves. 0 means that type has no grid and uses a plain fixed step. */
+  function snapFor(field) { return BIG_SNAP[field.type] || 0; }
+
+  WT.modes = { list: list, get: get, stepValue: stepValue, snapFor: snapFor, BIG_FIXED: BIG_FIXED };
 })();
